@@ -1,0 +1,6 @@
+# exports.yml — boot_recovery kernel plugin
+# vita_create_self CONFIG format: top-level key must be "main"
+main:
+  attributes: 0x0
+  start: module_start
+  stop: module_stop
