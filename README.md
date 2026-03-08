@@ -1,7 +1,7 @@
 
 ## About This Project
 
-Hi! I'm Jose (@DrinkingSubset6), and this is my first major homebrew project for the PS Vita.
+Hi! I'm Jose (@DrinkingSubset), and this is my first major homebrew project for the PS Vita.
 
 I want to be completely transparent from the start:  
 I'm **not a full-time or professional developer**. For years, I've had this idea in the back of my mind — a proper, reliable custom recovery menu you could boot into by holding R, something that could really help save bricked or misconfigured Vitas. But learning to code from scratch, especially low-level Vita kernel stuff, felt overwhelming and out of reach.
@@ -12,7 +12,7 @@ I'm sharing this openly because I believe in transparency — especially in the 
 
 Thank you for trying it out, and thank you to the entire Vita homebrew community whose tools, plugins, and knowledge made this possible.
 
-— DrinkingSubset6 ☣️🟩🥕⚡️🚀  
+— DrinkingSubset ☣️🟩🥕⚡️🚀  
 March 2026
 
 PS Vita Recovery Menu v1.0
