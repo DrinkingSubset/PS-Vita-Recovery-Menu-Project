@@ -96,6 +96,38 @@ To launch the menu normally (while R-trigger is being fixed):
 Just open the recovery bubble from LiveArea.
 
 Technical Architecture (Full Details)
+
+## How the R-Trigger Boot Plugin Works (Conceptual Flow)
+
+```mermaid
+flowchart TD
+    A[Power On / Cold Boot] --> B[Enso Bootloader]
+    B --> C[taiHEN loads kernel plugins]
+    C --> D[boot_recovery.skprx module_start runs]
+
+    subgraph "Early Boot Phase - Critical Timing Window"
+    D --> E[Debounced polling: ksceCtrlPeekBufferPositive<br>Multiple reads + 5 ms delays<br>Check for SCE_CTRL_RTRIGGER / LTRIGGER]
+    end
+
+    E -->|R/L held → success| F[Install one-shot hook on<br>SceAppMgr!sceAppMgrLaunchAppByUri<br>NID 0xFC4CFC30]
+    E -->|No trigger / garbage / not ready → fail| G[Exit immediately<br>No hook installed<br>Zero overhead on normal boot]
+
+    subgraph "Potential Failure: Controller Init Delay"
+    H[Controller driver not fully ready yet<br>→ Returns garbage / all zeros / invalid data<br>Common on 3.60 Enso cold boots or certain models]
+    end
+
+    E -.->|Misses trigger due to delay| H
+    H --> G
+
+    F --> I[Later: SceShell calls sceAppMgrLaunchAppByUri<br>to start LiveArea]
+    I --> J[Hook fires → one-shot g_triggered flag]
+    J --> K[Write flag files in ur0:tai/]
+    K --> L[Redirect URI to psgm:play?titleid=RECM00001]
+    L --> M[TAI_NEXT → normal launch path but to recovery app]
+    M --> N[Recovery menu loads instead of LiveArea]
+
+    G --> O[Continue normal boot to LiveArea]
+
 Boot Plugin (boot_recovery.skprx)
 
 Tiny kernel module (~5 KB) placed in ur0:recovery/.
