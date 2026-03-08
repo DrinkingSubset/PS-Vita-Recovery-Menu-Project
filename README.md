@@ -96,9 +96,8 @@ To launch the menu normally (while R-trigger is being fixed):
 Just open the recovery bubble from LiveArea.
 
 Technical Architecture (Full Details)
-
+````
 ## How the R-Trigger Boot Plugin Works (Conceptual Flow)
-
 flowchart TD
     A[Power On / Cold Boot] --> B[Enso Bootloader]
     B --> C[taiHEN loads kernel plugins]
@@ -126,6 +125,7 @@ flowchart TD
     M --> N[Recovery menu loads instead of LiveArea]
 
     G --> O[Continue normal boot to LiveArea]
+````
 
 Boot Plugin (boot_recovery.skprx)
 
