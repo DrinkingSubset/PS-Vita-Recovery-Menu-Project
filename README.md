@@ -99,7 +99,6 @@ Technical Architecture (Full Details)
 
 ## How the R-Trigger Boot Plugin Works (Conceptual Flow)
 
-```mermaid
 flowchart TD
     A[Power On / Cold Boot] --> B[Enso Bootloader]
     B --> C[taiHEN loads kernel plugins]
