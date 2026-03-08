@@ -164,11 +164,7 @@ You are free to use, modify, and distribute — just keep the safety warnings in
 
 Enjoy your safer Vita!
 If the R-trigger starts working for you or you find any bugs, please open an issue with your firmware/model. Contributions and pull requests are very welcome.
-— YourUsername (March 2026)
-
-Copy the entire block above into your repo’s README.md. Replace YourUsername with your actual GitHub name and update the screenshot links once you upload the images.
-This README is complete, honest about the current R-trigger issue, highlights the Modoru plan, and covers every technical detail we built together. Let me know if you want a shorter version or any tweaks!
-
+— DrinkingSubset (March 2026)
 
 ## Credits & Thanks to the Homebrew Scenes
 
