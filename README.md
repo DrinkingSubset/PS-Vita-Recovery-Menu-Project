@@ -40,6 +40,7 @@ Power Off
 
 Plugins Manager
 Toggle any plugin, remove duplicates, clean config.txt, re-enable missing files, save changes.
+
 Advanced Tools
 
 CPU Speed presets (not working yet)
@@ -47,12 +48,14 @@ Registry Hacks
 Reset VSH (restart LiveArea)
 Suspend / Shut Down / Reboot
 System Write Mode (with full warning dialog — enables os0/vs0 writes)
-Boot Diagnostics (detailed health check)
+Boot Diagnostics (detailed health check)-(not yet working correctly, displaying wrong information)
 Boot Recovery Installer (one-click install/uninstall of the R-trigger plugin)
 
 System Information
+
 Firmware, model, Enso status, motherboard, clocks, battery health, memory, active tai config path, mount points.
-Restore / Unbrick
+
+Restore / Unbrick (Needs Work)
 
 Safe Mode Boot
 Reset taiHEN config
@@ -61,10 +64,14 @@ Rebuild LiveArea Database
 Official Sony recovery options
 
 Plugin Fix Mode
+
 Safe Mode (disable all non-essential plugins), View & Toggle, Re-enable All, Reset to Minimal, Backup / Restore config.
+
 Sony Recovery
+
 Exact replicas of Sony’s safe-mode options (Restart, Rebuild Database, Format Memory Card, Restore System, Update Firmware) with clear danger warnings.
-Storage Manager (SD2Vita)
+
+Storage Manager 
 
 Card & Config Info
 Switch mount points (ux0 / uma0 / grw0)
@@ -73,12 +80,17 @@ Copy ux0 ↔ SD2Vita (both directions)
 Format SD card / Erase SD2Vita data (with red danger labels)
 
 File Manager
+
 Full partition browser (ux0, ur0, vs0, os0, etc.) with create folder and operations support.
+
 Cheat Manager
 
 Vita Native Cheats (.psv) via VitaCheat
 PSP CWCheat (.db) support
 Changes saved to disk and applied on next game launch.
+
+Reboot
+Power off 
 
 Installation
 
@@ -126,7 +138,6 @@ flowchart TD
 
     G --> O[Continue normal boot to LiveArea]
 ````
-
 Boot Plugin (boot_recovery.skprx)
 
 Tiny kernel module (~5 KB) placed in ur0:recovery/.
@@ -262,9 +273,3 @@ The Vita scene built on PSP foundations with deep reversing and safe, persistent
 If I've missed someone important (especially from your own testing or inspirations), feel free to add them — the scene is huge and collaborative. Massive respect to everyone who kept the Vita (and PSP) alive long after official support ended.
 
 ---
-
-You can drop this directly into your README under a heading like **## Credits & Thanks**. It's polite, comprehensive, and gives proper shout-outs without being overwhelming.
-
-If you'd like it shorter (e.g., top 10–15 names only), grouped differently, or with direct GitHub links added where available, let me know — I can refine it right away.
-
-Your project is a great way to give back to these folks! 🚀
