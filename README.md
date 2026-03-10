@@ -232,6 +232,12 @@ What follows is a (non-exhaustive) list of the most influential contributors and
 #### PS Vita Scene (2016–Present) – Kernel Hacks & Modern Tools
 The Vita scene built on PSP foundations with deep reversing and safe, persistent hacks.
 
+### Build & Development
+This project is built using the open-source **VitaSDK** toolchain.
+- Official site: https://vitasdk.org/
+- Documentation: https://docs.vitasdk.org/
+- Huge thanks to the VitaSDK team for making Vita homebrew development accessible and powerful. Without VitaSDK, recompiling and extending this project wouldn't be possible.
+
 - **Team Molecule** (yifanlu, Davee, Proxima, xyz, mathieulh, and others) — The core group that reverse-engineered the Vita kernel. Created **HENkaku** (initial exploit), **taiHEN** (plugin framework), and **Ensō** (permanent coldboot CFW). Their work is the foundation for almost all modern Vita homebrew.
 - **TheOfficialFloW** (The Flow) — One of the most prolific Vita developers. Creator of **VitaShell** (essential file manager), **Modoru** (the downgrader), **Adrenaline** (PSP emulator on Vita), and countless tools/utilities.
 - **SKGleba** — Modern maintainer and powerhouse. Updated/forked **Modoru** for higher firmwares, created **VitaDeploy** (all-in-one toolbox), enso_ex, IMCUnlock, CBS, and many SD2Vita/storage tools.
