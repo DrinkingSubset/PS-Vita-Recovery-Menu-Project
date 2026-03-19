@@ -1,0 +1,5 @@
+/home/drinkingsubset/Desktop/VitaRecovery/boot_trigger_user/build/CMakeFiles/boot_trigger_user.dir
+/home/drinkingsubset/Desktop/VitaRecovery/boot_trigger_user/build/CMakeFiles/boot_trigger_user-velf.dir
+/home/drinkingsubset/Desktop/VitaRecovery/boot_trigger_user/build/CMakeFiles/boot_trigger.suprx-self.dir
+/home/drinkingsubset/Desktop/VitaRecovery/boot_trigger_user/build/CMakeFiles/edit_cache.dir
+/home/drinkingsubset/Desktop/VitaRecovery/boot_trigger_user/build/CMakeFiles/rebuild_cache.dir
