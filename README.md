@@ -126,20 +126,20 @@ flowchart TD
     C --> D[boot_recovery.skprx module_start runs]
 
     subgraph "Early Boot Phase - Critical Timing Window"
-    D --> E[Debounced polling: ksceCtrlPeekBufferPositive<br>Multiple reads + 5 ms delays<br>Check for SCE_CTRL_RTRIGGER / LTRIGGER]
+    D --> E["Debounced polling: ksceCtrlPeekBufferPositive\nMultiple reads + 5 ms delays\nCheck for SCE_CTRL_RTRIGGER / LTRIGGER"]
     end
 
-    E -->|R/L held → success| F[Install one-shot hook on<br>SceAppMgr!sceAppMgrLaunchAppByUri<br>NID 0xFC4CFC30]
-    E -->|No trigger / garbage / not ready → fail| G[Exit immediately<br>No hook installed<br>Zero overhead on normal boot]
+    E -->|R/L held → success| F["Install one-shot hook on\nSceAppMgr!sceAppMgrLaunchAppByUri\nNID 0xFC4CFC30"]
+    E -->|No trigger / garbage / not ready → fail| G["Exit immediately\nNo hook installed\nZero overhead on normal boot"]
 
     subgraph "Potential Failure: Controller Init Delay"
-    H[Controller driver not fully ready yet<br>→ Returns garbage / all zeros / invalid data<br>Common on 3.60 Enso cold boots or certain models]
+    H["Controller driver not fully ready yet\n→ Returns garbage / all zeros / invalid data\nCommon on 3.60 Enso cold boots or certain models"]
     end
 
     E -.->|Misses trigger due to delay| H
     H --> G
 
-    F --> I[Later: SceShell calls sceAppMgrLaunchAppByUri<br>to start LiveArea]
+    F --> I["Later: SceShell calls sceAppMgrLaunchAppByUri\nto start LiveArea"]
     I --> J[Hook fires → one-shot g_triggered flag]
     J --> K[Write flag files in ur0:tai/]
     K --> L[Redirect URI to psgm:play?titleid=RECM00001]
