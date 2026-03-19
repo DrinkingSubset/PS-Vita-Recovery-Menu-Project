@@ -51,7 +51,7 @@ Toggle any plugin, remove duplicates, clean config.txt, re-enable missing files,
 * Reset VSH (restart LiveArea)
 * Suspend / Shut Down / Reboot
 * System Write Mode (with full warning dialog — enables os0/vs0 writes)
-* Boot Diagnostics (detailed health check)
+* Boot Diagnostics (detailed health check) (still needs fixing)
 * Boot Recovery Installer (one-click install/uninstall of the R-trigger plugin)
 
 ### System Information
