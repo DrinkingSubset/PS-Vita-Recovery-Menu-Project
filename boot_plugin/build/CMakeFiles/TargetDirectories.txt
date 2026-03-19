@@ -1,0 +1,5 @@
+/home/drinkingsubset/Desktop/VitaRecovery/boot_plugin/build/CMakeFiles/boot_recovery.dir
+/home/drinkingsubset/Desktop/VitaRecovery/boot_plugin/build/CMakeFiles/boot_recovery-velf.dir
+/home/drinkingsubset/Desktop/VitaRecovery/boot_plugin/build/CMakeFiles/boot_recovery.skprx-self.dir
+/home/drinkingsubset/Desktop/VitaRecovery/boot_plugin/build/CMakeFiles/edit_cache.dir
+/home/drinkingsubset/Desktop/VitaRecovery/boot_plugin/build/CMakeFiles/rebuild_cache.dir

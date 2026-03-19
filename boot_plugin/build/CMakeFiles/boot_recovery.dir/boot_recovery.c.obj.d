@@ -1,0 +1,37 @@
+CMakeFiles/boot_recovery.dir/boot_recovery.c.obj: \
+ /home/drinkingsubset/Desktop/VitaRecovery/boot_plugin/boot_recovery.c \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/modulemgr.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/vitasdk/build_utils.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2common/kernel/modulemgr.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2common/types.h \
+ /usr/local/vitasdk/lib/gcc/arm-vita-eabi/10.3.0/include/stddef.h \
+ /usr/local/vitasdk/lib/gcc/arm-vita-eabi/10.3.0/include/stdint.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/stdint.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/machine/_default_types.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/sys/features.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/_newlib_version.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/bits/posix_opt.h \
+ /usr/local/vitasdk/lib/gcc/arm-vita-eabi/10.3.0/include-fixed/limits.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/sys/_intsup.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/sys/_stdint.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/types.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/thread.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2common/kernel/threadmgr.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/cond.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/mutex.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/fast_mutex.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/lw_cond.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/lw_mutex.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/event_flags.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/semaphores.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/msg_pipe.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/callback.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/misc.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/workqueues.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/debugger.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/kernel/threadmgr/vfp.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/ctrl.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2common/ctrl.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2kern/io/fcntl.h \
+ /usr/local/vitasdk/arm-vita-eabi/include/psp2common/kernel/iofilemgr.h
