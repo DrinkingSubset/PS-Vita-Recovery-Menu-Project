@@ -1,23 +1,25 @@
 /*
  * recovery_installer.c — R-Trigger Boot Recovery Installer
  *
- * Installs or removes the boot_recovery.skprx kernel plugin that lets
- * the user hold R during power-on to enter the Recovery Menu directly.
+ * Installs or removes the two-part boot recovery system:
+ *   - boot_recovery.skprx  (kernel plugin: R-button detection at boot)
+ *   - boot_trigger.suprx   (user plugin:   launches Recovery Menu from user space)
  *
  * Install steps:
- *   1. Create ur0:recovery/ directory
- *   2. Copy boot_recovery.skprx from app0: to ur0:recovery/
- *   3. Back up active tai config to ur0:tai/config_backup_bootrecov.txt
- *   4. Add "ur0:recovery/boot_recovery.skprx" under *KERNEL in tai config
+ *   1. Copy boot_recovery.skprx from app0: to tai_dir/
+ *   2. Copy boot_trigger.suprx  from app0: to tai_dir/
+ *   3. Back up active tai config
+ *   4. Add boot_recovery.skprx under *KERNEL in tai config
+ *   5. Add boot_trigger.suprx  under *main   in tai config
  *
  * Uninstall steps:
- *   1. Remove "ur0:recovery/boot_recovery.skprx" line from tai config
- *   2. Delete ur0:recovery/boot_recovery.skprx
+ *   1. Remove both plugin lines from tai config
+ *   2. Delete both plugin files
  *
  * Safety rules:
  *   - Config is always backed up before modification
  *   - Atomic write (tmp → rename) for config changes
- *   - Plugin line is verified to exist before uninstalling
+ *   - Plugin lines are verified to exist before uninstalling
  *   - Never touches vs0:, os0:, or any system partition
  */
 
@@ -36,12 +38,9 @@
 #include "menu.h"
 
 /* ── Paths ───────────────────────────────────────────────────────────────── */
-#define RI_PLUGIN_SRC   "app0:boot_recovery.skprx"
-#define RI_PLUGIN_DST   "ux0:tai/boot_recovery.skprx"
-#define RI_PLUGIN_DIR   "ux0:tai"
-#define RI_PLUGIN_LINE  "ux0:tai/boot_recovery.skprx"
-#define RI_BACKUP_PATH  "ur0:tai/config_backup_bootrecov.txt"
-#define RI_COPY_BUF     (32 * 1024)
+#define RI_SKPRX_SRC   "app0:boot_recovery.skprx"   /* kernel plugin source */
+#define RI_SUPRX_SRC   "app0:boot_trigger.suprx"    /* user plugin source   */
+#define RI_COPY_BUF    (32 * 1024)
 
 /* ── Layout ──────────────────────────────────────────────────────────────── */
 #define RI_TITLE_LINE   TITLE_LINE
@@ -129,7 +128,6 @@ static int ri_copy_file(const char *src, const char *dst) {
     SceUID fdin = sceIoOpen(src, SCE_O_RDONLY, 0);
     if (fdin < 0) return -1;
 
-    /* Write to .tmp first, rename over dst atomically */
     char tmp[128];
     snprintf(tmp, sizeof(tmp), "%s.tmp", dst);
 
@@ -162,13 +160,8 @@ static int ri_write_config(const char *path, const char *data, int len) {
     return sceIoRename(tmp, path);
 }
 
-/* ── Check if plugin is already in config (as an active, uncommented line) ── */
-/*
- * strstr alone would match commented-out lines like:
- *   #ur0:recovery/boot_recovery.skprx
- * We walk every occurrence and check the line is not prefixed by '#'.
- */
-static int ri_plugin_in_config(const char *config_path) {
+/* ── Check if a plugin line is in config (uncommented) ───────────────────── */
+static int ri_plugin_in_config(const char *config_path, const char *plugin_line) {
     SceUID fd = sceIoOpen(config_path, SCE_O_RDONLY, 0);
     if (fd < 0) return 0;
     int sz = (int)sceIoLseek(fd, 0, SCE_SEEK_END);
@@ -182,22 +175,93 @@ static int ri_plugin_in_config(const char *config_path) {
 
     int found = 0;
     const char *p = buf;
-    while ((p = strstr(p, RI_PLUGIN_LINE)) != NULL) {
-        /* Walk back to the start of this line */
+    while ((p = strstr(p, plugin_line)) != NULL) {
         const char *sol = p;
         while (sol > buf && *(sol - 1) != '\n') sol--;
-        /* Skip leading whitespace */
         while (*sol == ' ' || *sol == '\t') sol++;
-        /* Only count as installed if the line is NOT commented out */
-        if (*sol != '#') {
-            found = 1;
-            break;
-        }
-        p++;  /* advance past this occurrence and keep searching */
+        if (*sol != '#') { found = 1; break; }
+        p++;
     }
 
     free(buf);
     return found;
+}
+
+/*
+ * ri_insert_after_section — insert new_line immediately after a *SECTION header.
+ *
+ * Writes result into out (caller must supply out with orig_sz + extra slack).
+ * Returns the length of the new buffer.
+ * If the section is not found, appends "*section\nnew_line\n" at the end.
+ */
+static int ri_insert_after_section(const char *orig, int orig_sz,
+                                   const char *section, const char *new_line,
+                                   char *out) {
+    /* Find section header at the real start of a line (not commented) */
+    const char *section_pos = NULL;
+    const char *p = orig;
+    while ((p = strstr(p, section)) != NULL) {
+        const char *sol = p;
+        while (sol > orig && *(sol - 1) != '\n') sol--;
+        while (*sol == ' ' || *sol == '\t') sol++;
+        if (*sol == '*') { section_pos = p; break; }
+        p++;
+    }
+
+    int out_len = 0;
+    int line_len = strlen(new_line);
+
+    if (section_pos) {
+        /* Copy up to and including the section header line */
+        const char *eol = section_pos;
+        while (*eol && *eol != '\n') eol++;
+        if (*eol == '\n') eol++;
+        int head = (int)(eol - orig);
+        memcpy(out, orig, head);
+        out_len = head;
+        /* Insert our plugin line */
+        memcpy(out + out_len, new_line, line_len);
+        out_len += line_len;
+        out[out_len++] = '\n';
+        /* Copy the rest of the original */
+        memcpy(out + out_len, orig + head, orig_sz - head);
+        out_len += orig_sz - head;
+    } else {
+        /* Section not found — append it at the end */
+        memcpy(out, orig, orig_sz);
+        out_len = orig_sz;
+        /* Ensure file ends with a newline before our new block */
+        if (out_len > 0 && out[out_len - 1] != '\n')
+            out[out_len++] = '\n';
+        int ll = snprintf(out + out_len, 256, "%s\n%s\n", section, new_line);
+        out_len += ll;
+    }
+
+    return out_len;
+}
+
+/*
+ * ri_remove_line — remove the first uncommented occurrence of line_to_remove
+ * from buf in-place.  Returns the new buffer length.
+ */
+static int ri_remove_line(char *buf, int sz, const char *line_to_remove) {
+    char *pos = strstr(buf, line_to_remove);
+    if (!pos) return sz;
+    /* Walk back to start-of-line */
+    char *sol = pos;
+    while (sol > buf && *(sol - 1) != '\n') sol--;
+    /* Skip leading whitespace to reach the first real char */
+    const char *chk = sol;
+    while (*chk == ' ' || *chk == '\t') chk++;
+    if (*chk == '#') return sz;   /* commented-out — leave it alone */
+    /* Find end of line */
+    char *eol = pos;
+    while (*eol && *eol != '\n') eol++;
+    if (*eol == '\n') eol++;
+    /* Shift the rest of the buffer over the deleted line */
+    int tail = (int)(sz - (eol - buf));
+    memmove(sol, eol, tail + 1);
+    return sz - (int)(eol - sol);
 }
 
 /* ── Install ─────────────────────────────────────────────────────────────── */
@@ -208,25 +272,41 @@ static void ri_install(void) {
         return;
     }
 
-    /* Check the plugin source exists in the VPK */
-    if (!ri_path_exists(RI_PLUGIN_SRC)) {
+    /* Derive tai dir and plugin destinations from active config path */
+    char tai_dir[48];
+    char skprx_dst[64], skprx_line[64];
+    char suprx_dst[64], suprx_line[64];
+    char backup[64];
+
+    snprintf(tai_dir, sizeof(tai_dir), "%s", cfg);
+    char *slash = strrchr(tai_dir, '/');
+    if (slash) *slash = '\0'; else snprintf(tai_dir, sizeof(tai_dir), "ux0:tai");
+
+    snprintf(skprx_dst,  sizeof(skprx_dst),  "%s/boot_recovery.skprx", tai_dir);
+    snprintf(skprx_line, sizeof(skprx_line), "%s/boot_recovery.skprx", tai_dir);
+    snprintf(suprx_dst,  sizeof(suprx_dst),  "%s/boot_trigger.suprx",  tai_dir);
+    snprintf(suprx_line, sizeof(suprx_line), "%s/boot_trigger.suprx",  tai_dir);
+    snprintf(backup,     sizeof(backup),     "%s/config_backup_bootrecov.txt", tai_dir);
+
+    /* Check both source files exist in the VPK */
+    if (!ri_path_exists(RI_SKPRX_SRC)) {
         ri_message("boot_recovery.skprx not found in app0:",
-                   "Rebuild VPK with plugin included.", COLOR_RED);
+                   "Rebuild VPK with both plugins included.", COLOR_RED);
+        return;
+    }
+    if (!ri_path_exists(RI_SUPRX_SRC)) {
+        ri_message("boot_trigger.suprx not found in app0:",
+                   "Rebuild VPK with both plugins included.", COLOR_RED);
         return;
     }
 
     /* Already installed? */
-    if (ri_plugin_in_config(cfg)) {
+    int skprx_cfg = ri_plugin_in_config(cfg, skprx_line);
+    int suprx_cfg = ri_plugin_in_config(cfg, suprx_line);
+    if (skprx_cfg && suprx_cfg &&
+        ri_path_exists(skprx_dst) && ri_path_exists(suprx_dst)) {
         ri_message("Boot Recovery already installed.",
                    "Uninstall first if you want to reinstall.", COLOR_YELLOW);
-        return;
-    }
-
-    /* The app is already running, so app0: is mounted to this title's
-     * directory. If app0: isn't accessible something is seriously wrong. */
-    if (!ri_path_exists("app0:")) {
-        ri_message("Cannot access app0: — reinstall the VPK.",
-                   "", COLOR_RED);
         return;
     }
 
@@ -235,18 +315,25 @@ static void ri_install(void) {
         "Hold R at power-on to enter Recovery Menu."))
         return;
 
-    /* Step 1: Create destination directory */
-    sceIoMkdir(RI_PLUGIN_DIR, 0777);
+    /* Step 1: Copy kernel plugin */
+    if (ri_copy_file(RI_SKPRX_SRC, skprx_dst) < 0) {
+        char emsg[72];
+        snprintf(emsg, sizeof(emsg), "Failed to copy boot_recovery.skprx to %s", tai_dir);
+        ri_message(emsg, "Check available space.", COLOR_RED);
+        return;
+    }
 
-    /* Step 2: Copy plugin file */
-    if (ri_copy_file(RI_PLUGIN_SRC, RI_PLUGIN_DST) < 0) {
-        ri_message("Failed to copy boot_recovery.skprx",
-                   "Check ur0: has enough free space.", COLOR_RED);
+    /* Step 2: Copy user plugin */
+    if (ri_copy_file(RI_SUPRX_SRC, suprx_dst) < 0) {
+        char emsg[72];
+        snprintf(emsg, sizeof(emsg), "Failed to copy boot_trigger.suprx to %s", tai_dir);
+        ri_message(emsg, "Check available space.", COLOR_RED);
+        sceIoRemove(skprx_dst);   /* roll back the kernel plugin we just copied */
         return;
     }
 
     /* Step 3: Back up config */
-    ri_copy_file(cfg, RI_BACKUP_PATH);
+    ri_copy_file(cfg, backup);
 
     /* Step 4: Read current config */
     SceUID fd = sceIoOpen(cfg, SCE_O_RDONLY, 0);
@@ -261,65 +348,49 @@ static void ri_install(void) {
         ri_message("Config file too large or empty.", "", COLOR_RED);
         return;
     }
-    char *orig = malloc(sz + 256);
+    /* Extra slack: 512 bytes covers two inserted lines + two new section headers */
+    char *orig = malloc(sz + 512);
     if (!orig) { sceIoClose(fd); ri_message("Out of memory.", "", COLOR_RED); return; }
     sceIoRead(fd, orig, sz);
     sceIoClose(fd);
     orig[sz] = '\0';
 
-    /* Step 5: Insert plugin line after *KERNEL header.
-     * Strategy: find "*KERNEL" line, insert our line immediately after it.
-     * If no *KERNEL section exists, prepend one at the top. */
-    char *out = malloc(sz + 256);
-    if (!out) { free(orig); ri_message("Out of memory.", "", COLOR_RED); return; }
+    /*
+     * Step 5a: Insert boot_recovery.skprx after *KERNEL.
+     *   Pass 1: orig → pass1_buf
+     */
+    char *pass1 = malloc(sz + 512);
+    if (!pass1) { free(orig); ri_message("Out of memory.", "", COLOR_RED); return; }
 
-    /* Find *KERNEL only at the start of a line — don't match commented
-     * lines like "# *KERNEL" which would put the plugin in the wrong section */
-    char *kernel_pos = NULL;
-    {
-        const char *p = orig;
-        while ((p = strstr(p, "*KERNEL")) != NULL) {
-            const char *sol = p;
-            while (sol > orig && *(sol - 1) != '\n') sol--;
-            while (*sol == ' ' || *sol == '\t') sol++;
-            if (*sol == '*') {
-                kernel_pos = (char *)p;
-                break;
-            }
-            p++;
-        }
-    }
-    int out_len = 0;
-
-    if (kernel_pos) {
-        /* Copy everything up to and including the *KERNEL line */
-        char *eol = kernel_pos;
-        while (*eol && *eol != '\n') eol++;
-        if (*eol == '\n') eol++;
-        int head = (int)(eol - orig);
-        memcpy(out, orig, head);
-        out_len = head;
-        /* Insert our plugin line */
-        int ll = snprintf(out + out_len, 256,
-                          "%s\n", RI_PLUGIN_LINE);
-        out_len += ll;
-        /* Copy the rest */
-        memcpy(out + out_len, orig + head, sz - head);
-        out_len += sz - head;
+    int pass1_sz = sz;
+    if (!skprx_cfg) {
+        pass1_sz = ri_insert_after_section(orig, sz, "*KERNEL", skprx_line, pass1);
     } else {
-        /* No *KERNEL section — prepend one */
-        int ll = snprintf(out, sz + 256,
-                          "*KERNEL\n%s\n\n", RI_PLUGIN_LINE);
-        out_len = ll;
-        memcpy(out + out_len, orig, sz);
-        out_len += sz;
+        /* Already present — just copy through */
+        memcpy(pass1, orig, sz + 1);
+        pass1_sz = sz;
     }
-
     free(orig);
 
+    /*
+     * Step 5b: Insert boot_trigger.suprx after *main.
+     *   Pass 2: pass1_buf → pass2_buf
+     */
+    char *pass2 = malloc(pass1_sz + 512);
+    if (!pass2) { free(pass1); ri_message("Out of memory.", "", COLOR_RED); return; }
+
+    int pass2_sz = pass1_sz;
+    if (!suprx_cfg) {
+        pass2_sz = ri_insert_after_section(pass1, pass1_sz, "*main", suprx_line, pass2);
+    } else {
+        memcpy(pass2, pass1, pass1_sz + 1);
+        pass2_sz = pass1_sz;
+    }
+    free(pass1);
+
     /* Step 6: Write new config atomically */
-    int r = ri_write_config(cfg, out, out_len);
-    free(out);
+    int r = ri_write_config(cfg, pass2, pass2_sz);
+    free(pass2);
 
     if (r < 0) {
         ri_message("Failed to write tai config.", "Backup preserved.", COLOR_RED);
@@ -327,7 +398,7 @@ static void ri_install(void) {
     }
 
     ri_message("Boot Recovery installed!",
-               "Hold R / L at power-on. Reboot to activate.", COLOR_GREEN);
+               "Hold R at power-on to enter Recovery.", COLOR_GREEN);
     if (ri_confirm("Reboot now to activate?",
                    "Boot recovery requires a reboot to take effect."))
         scePowerRequestColdReset();
@@ -341,13 +412,33 @@ static void ri_uninstall(void) {
         return;
     }
 
-    if (!ri_plugin_in_config(cfg)) {
+    /* Derive paths from active config */
+    char tai_dir[48];
+    char skprx_dst[64], skprx_line[64];
+    char suprx_dst[64], suprx_line[64];
+    char backup[64];
+
+    snprintf(tai_dir, sizeof(tai_dir), "%s", cfg);
+    char *slash = strrchr(tai_dir, '/');
+    if (slash) *slash = '\0'; else snprintf(tai_dir, sizeof(tai_dir), "ux0:tai");
+
+    snprintf(skprx_dst,  sizeof(skprx_dst),  "%s/boot_recovery.skprx", tai_dir);
+    snprintf(skprx_line, sizeof(skprx_line), "%s/boot_recovery.skprx", tai_dir);
+    snprintf(suprx_dst,  sizeof(suprx_dst),  "%s/boot_trigger.suprx",  tai_dir);
+    snprintf(suprx_line, sizeof(suprx_line), "%s/boot_trigger.suprx",  tai_dir);
+    snprintf(backup,     sizeof(backup),     "%s/config_backup_bootrecov.txt", tai_dir);
+
+    int skprx_cfg = ri_plugin_in_config(cfg, skprx_line);
+    int suprx_cfg = ri_plugin_in_config(cfg, suprx_line);
+
+    if (!skprx_cfg && !suprx_cfg &&
+        !ri_path_exists(skprx_dst) && !ri_path_exists(suprx_dst)) {
         ri_message("Boot Recovery is not installed.", "", COLOR_YELLOW);
         return;
     }
 
     if (!ri_confirm("Uninstall Boot Recovery?",
-                    "Removes plugin line from tai config."))
+                    "Removes both plugin lines from tai config."))
         return;
 
     /* Read config */
@@ -366,24 +457,12 @@ static void ri_uninstall(void) {
     sceIoClose(fd);
     buf[sz] = '\0';
 
-    /* Remove the plugin line (and its trailing newline) */
-    char *pos = strstr(buf, RI_PLUGIN_LINE);
-    if (pos) {
-        /* Find start of this line */
-        char *sol = pos;
-        while (sol > buf && *(sol-1) != '\n') sol--;
-        /* Find end of this line */
-        char *eol = pos;
-        while (*eol && *eol != '\n') eol++;
-        if (*eol == '\n') eol++;
-        /* Shift remainder over the line */
-        int tail = (int)(sz - (eol - buf));
-        memmove(sol, eol, tail + 1);
-        sz = (int)(sz - (eol - sol));
-    }
+    /* Remove both plugin lines (each call is in-place, updates sz) */
+    sz = ri_remove_line(buf, sz, skprx_line);
+    sz = ri_remove_line(buf, sz, suprx_line);
 
     /* Backup then write */
-    ri_copy_file(cfg, RI_BACKUP_PATH);
+    ri_copy_file(cfg, backup);
     int r = ri_write_config(cfg, buf, sz);
     free(buf);
 
@@ -392,8 +471,9 @@ static void ri_uninstall(void) {
         return;
     }
 
-    /* Remove the plugin file */
-    sceIoRemove(RI_PLUGIN_DST);
+    /* Delete both plugin files (ignore errors if already gone) */
+    sceIoRemove(skprx_dst);
+    sceIoRemove(suprx_dst);
 
     ri_message("Boot Recovery uninstalled.", "Reboot to take effect.", COLOR_GREEN);
     if (ri_confirm("Reboot now?", ""))
@@ -401,12 +481,38 @@ static void ri_uninstall(void) {
 }
 
 /* ── Status query ─────────────────────────────────────────────────────────── */
-static int ri_get_status(int *plugin_file_ok, int *config_ok) {
-    *plugin_file_ok = ri_path_exists(RI_PLUGIN_DST);
+/*
+ * Fills four independent status flags:
+ *   skprx_ok     — kernel plugin file exists on storage
+ *   skprx_cfg_ok — *KERNEL entry present in tai config
+ *   suprx_ok     — user plugin file exists on storage
+ *   suprx_cfg_ok — *main entry present in tai config
+ *
+ * Returns 1 only if all four are true (fully installed).
+ */
+static int ri_get_status(int *skprx_ok,     int *skprx_cfg_ok,
+                         int *suprx_ok,     int *suprx_cfg_ok) {
     const char *cfg = g_compat.active_tai_config;
-    *config_ok = (cfg && cfg[0] != '(' && cfg[0] != '\0')
-                 ? ri_plugin_in_config(cfg) : 0;
-    return (*plugin_file_ok && *config_ok);
+    char tai_dir[48], skprx_dst[64], skprx_line[64], suprx_dst[64], suprx_line[64];
+
+    snprintf(tai_dir, sizeof(tai_dir), "%s",
+             (cfg && cfg[0] != '(') ? cfg : "ux0:tai/config.txt");
+    char *sl = strrchr(tai_dir, '/');
+    if (sl) *sl = '\0'; else snprintf(tai_dir, sizeof(tai_dir), "ux0:tai");
+
+    snprintf(skprx_dst,  sizeof(skprx_dst),  "%s/boot_recovery.skprx", tai_dir);
+    snprintf(skprx_line, sizeof(skprx_line), "%s/boot_recovery.skprx", tai_dir);
+    snprintf(suprx_dst,  sizeof(suprx_dst),  "%s/boot_trigger.suprx",  tai_dir);
+    snprintf(suprx_line, sizeof(suprx_line), "%s/boot_trigger.suprx",  tai_dir);
+
+    *skprx_ok     = ri_path_exists(skprx_dst);
+    *suprx_ok     = ri_path_exists(suprx_dst);
+    *skprx_cfg_ok = (cfg && cfg[0] != '(' && cfg[0] != '\0')
+                    ? ri_plugin_in_config(cfg, skprx_line) : 0;
+    *suprx_cfg_ok = (cfg && cfg[0] != '(' && cfg[0] != '\0')
+                    ? ri_plugin_in_config(cfg, suprx_line) : 0;
+
+    return (*skprx_ok && *skprx_cfg_ok && *suprx_ok && *suprx_cfg_ok);
 }
 
 /* ── Main screen ─────────────────────────────────────────────────────────── */
@@ -418,8 +524,8 @@ static const char *RI_LABELS[RI_OPT_COUNT] = {
     "View Status",
 };
 static const char *RI_DESCS[RI_OPT_COUNT] = {
-    "Install R-trigger kernel plugin + update tai config",
-    "Remove plugin line from tai config + delete file",
+    "Install kernel + user plugins, update tai config",
+    "Remove both plugin lines from tai config + delete files",
     "Show current installation status",
 };
 
@@ -431,8 +537,12 @@ void recovery_installer_run(void) {
 
     while (1) {
         /* Get current status */
-        int pf_ok, cfg_ok;
-        int installed = ri_get_status(&pf_ok, &cfg_ok);
+        int skprx_ok, skprx_cfg_ok, suprx_ok, suprx_cfg_ok;
+        int installed = ri_get_status(&skprx_ok, &skprx_cfg_ok,
+                                      &suprx_ok, &suprx_cfg_ok);
+        /* Partial: some but not all components present */
+        int partial = !installed &&
+                      (skprx_ok || skprx_cfg_ok || suprx_ok || suprx_cfg_ok);
 
         display_start();
         display_clear(COLOR_BG);
@@ -443,28 +553,41 @@ void recovery_installer_run(void) {
         display_text(MENU_X, 26, COLOR_YELLOW, "Boot Recovery Installer");
         display_hline(0, RI_TITLE_LINE, SCREEN_W, COLOR_GREEN);
 
-        /* Status banner */
+        /* Status banner — 5 rows: overall + 4 component lines */
         int bany = TITLE_H + 4;
-        int banh = LINE_H * 3 + 6;
-        display_rect(0, bany, SCREEN_W, banh,
-                     installed ? RGBA8(0,40,0,255) : RGBA8(30,20,0,255));
-        uint32_t st_col = installed ? COLOR_GREEN : COLOR_YELLOW;
-        display_text(MENU_X, bany + 4,
-                     st_col,
-                     installed ? "Status: INSTALLED" : "Status: NOT INSTALLED");
-        display_text(MENU_X, bany + 4 + LINE_H, COLOR_DIM,
-                     pf_ok ? "Plugin file:   FOUND  (ur0:recovery/)"
-                           : "Plugin file:   not found");
-        display_text(MENU_X, bany + 4 + LINE_H * 2, COLOR_DIM,
-                     cfg_ok ? "tai config:    entry present"
-                             : "tai config:    no entry");
+        int banh = LINE_H * 5 + 8;
+        uint32_t ban_bg = installed ? RGBA8(0, 40, 0, 255)
+                        : partial  ? RGBA8(40, 20, 0, 255)
+                                   : RGBA8(30, 10, 10, 255);
+        display_rect(0, bany, SCREEN_W, banh, ban_bg);
+
+        uint32_t st_col = installed ? COLOR_GREEN
+                        : partial   ? COLOR_YELLOW
+                                    : COLOR_RED;
+        const char *st_str = installed ? "Status: FULLY INSTALLED"
+                           : partial   ? "Status: PARTIAL (reinstall recommended)"
+                                       : "Status: NOT INSTALLED";
+        display_text(MENU_X, bany + 4,                st_col,    st_str);
+        display_text(MENU_X, bany + 4 + LINE_H,       COLOR_DIM,
+                     skprx_ok     ? "  .skprx kernel file : FOUND"
+                                  : "  .skprx kernel file : NOT FOUND");
+        display_text(MENU_X, bany + 4 + LINE_H * 2,   COLOR_DIM,
+                     skprx_cfg_ok ? "  *KERNEL cfg entry  : present"
+                                  : "  *KERNEL cfg entry  : MISSING");
+        display_text(MENU_X, bany + 4 + LINE_H * 3,   COLOR_DIM,
+                     suprx_ok     ? "  .suprx user file   : FOUND"
+                                  : "  .suprx user file   : NOT FOUND");
+        display_text(MENU_X, bany + 4 + LINE_H * 4,   COLOR_DIM,
+                     suprx_cfg_ok ? "  *main cfg entry    : present"
+                                  : "  *main cfg entry    : MISSING");
+
         display_hline(0, bany + banh, SCREEN_W, RGBA8(40, 40, 40, 255));
 
         /* Usage hint */
         int hint_y = bany + banh + 6;
         display_text(MENU_X, hint_y, COLOR_DIM,
                      "Hold R trigger at power-on to launch Recovery.");
-        display_hline(0, hint_y + LINE_H + 4, SCREEN_W, RGBA8(40,40,40,255));
+        display_hline(0, hint_y + LINE_H + 4, SCREEN_W, RGBA8(40, 40, 40, 255));
 
         /* Option rows */
         int opt_y = hint_y + LINE_H + 10;
@@ -476,8 +599,8 @@ void recovery_installer_run(void) {
                 display_rect(0, ry - 1, SCREEN_W - 8, row_h, COLOR_SEL_BG);
             uint32_t tc = (i == sel) ? COLOR_SELECTED : COLOR_TEXT;
             uint32_t dc = (i == sel) ? COLOR_SELECTED : COLOR_DIM;
-            display_text(MENU_X, ry,           tc, RI_LABELS[i]);
-            display_text(MENU_X, ry + LINE_H,  dc, RI_DESCS[i]);
+            display_text(MENU_X, ry,          tc, RI_LABELS[i]);
+            display_text(MENU_X, ry + LINE_H, dc, RI_DESCS[i]);
         }
 
         /* Footer */
@@ -500,29 +623,19 @@ void recovery_installer_run(void) {
                 case 0: ri_install();   break;
                 case 1: ri_uninstall(); break;
                 case 2: {
-                    /* Show detailed status including where app is installed */
-                    char l1[64], l2[64], l3[64];
-                    snprintf(l1, sizeof(l1), "Plugin file: %s",
-                             pf_ok ? "FOUND" : "NOT FOUND");
-                    snprintf(l2, sizeof(l2), "tai config entry: %s",
-                             cfg_ok ? "PRESENT" : "MISSING");
-                    /* Show which partition the app is actually on */
-                    const char *locs[] = {
-                        "ux0:app/RECM00001",
-                        "imc0:app/RECM00001",
-                        "uma0:app/RECM00001",
-                        "ur0:app/RECM00001"
-                    };
-                    const char *found_at = "App: NOT FOUND on any partition";
-                    for (int i = 0; i < 4; i++) {
-                        if (ri_path_exists(locs[i])) {
-                            found_at = locs[i];
-                            break;
-                        }
-                    }
-                    snprintf(l3, sizeof(l3), "%.48s", found_at);
-                    ri_message(l1, l3,
-                               installed ? COLOR_GREEN : COLOR_YELLOW);
+                    /* Detailed status popup */
+                    char l1[80], l2[80];
+                    snprintf(l1, sizeof(l1), "%s  |  cfg: %s",
+                             installed ? "FULLY INSTALLED" : partial ? "PARTIAL" : "NOT INSTALLED",
+                             g_compat.active_tai_config ? g_compat.active_tai_config : "unknown");
+                    snprintf(l2, sizeof(l2),
+                             ".skprx:%s cfg:%s  .suprx:%s cfg:%s",
+                             skprx_ok     ? "OK" : "NO",
+                             skprx_cfg_ok ? "OK" : "NO",
+                             suprx_ok     ? "OK" : "NO",
+                             suprx_cfg_ok ? "OK" : "NO");
+                    ri_message(l1, l2,
+                               installed ? COLOR_GREEN : partial ? COLOR_YELLOW : COLOR_RED);
                     break;
                 }
             }

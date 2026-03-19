@@ -339,8 +339,11 @@ void compat_init(void) {
         switch (cdlg) {
             case 0:
                 /* cdlg cannot distinguish PCH-1000 vs PCH-1100;
-                 * use imc0 to at least rule out 2000/PSTV */
-                c->model = MODEL_VITA_1000;
+                 * use imc0 to distinguish 2000/PSTV from 1000/1100 */
+                if (c->has_imc0)
+                    c->model = drive_exists("psglobal:") ? MODEL_PSTV : MODEL_VITA_2000;
+                else
+                    c->model = MODEL_VITA_1000;
                 break;
             case 1: c->model = MODEL_VITA_2000; break;
             case 2: c->model = MODEL_PSTV;      break;
@@ -350,6 +353,12 @@ void compat_init(void) {
                     : MODEL_VITA_1000;
                 break;
         }
+    }
+
+    /* Final override: if model still shows as 1000 but imc0 exists,
+     * this must be a 2000 or PSTV — registry returned wrong value */
+    if (c->model == MODEL_VITA_1000 && c->has_imc0) {
+        c->model = drive_exists("psglobal:") ? MODEL_PSTV : MODEL_VITA_2000;
     }
 
     /* Try hwinfo first (works in VSH/kernel context), else derive from model */
