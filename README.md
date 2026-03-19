@@ -147,6 +147,8 @@ flowchart TD
     M --> N[Recovery menu loads instead of LiveArea]
 
     G --> O[Continue normal boot to LiveArea]
+
+
 ## Credits & Thanks to the Homebrew Scenes
 
 This recovery menu stands on the shoulders of giants. The PSP and PS Vita homebrew communities have been collaborative, innovative, and persistent for over two decades. Without their exploits, tools, libraries, and shared knowledge, none of this would exist.
