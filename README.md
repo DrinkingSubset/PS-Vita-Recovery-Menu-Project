@@ -135,7 +135,7 @@ flowchart TD
     D --> E["Debounced polling: ksceCtrlPeekBufferPositive\nMultiple reads + 5 ms delays\nCheck for SCE_CTRL_RTRIGGER / LTRIGGER"]
     end
 
-    E -->|R/L held → success| F["Install one-shot hook on\nSceAppMgr!sceAppMgrLaunchAppByUri\nNID 0xFC4CFC30"]
+    E -->|R held → success| F["Install one-shot hook on\nSceAppMgr!sceAppMgrLaunchAppByUri\nNID 0xFC4CFC30"]
     E -->|No trigger / garbage / not ready → fail| G["Exit immediately\nNo hook installed\nZero overhead on normal boot"]
 
     subgraph "Potential Failure: Controller Init Delay"
