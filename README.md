@@ -29,40 +29,40 @@ This project gives you a complete toolkit for plugin management, system diagnost
 ## Features
 
 ### Main Menu
-- Exit to LiveArea
-- Plugins
-- Advanced
-- System Info
-- Restore / Unbrick
-- Plugin Fix Mode
-- Sony Recovery
-- Storage Manager
-- File Manager
-- Cheat Manager
-- Reboot
-- Power Off
+* Exit to LiveArea
+* Plugins
+* Advanced
+* System Info
+* Restore / Unbrick
+* Plugin Fix Mode
+* Sony Recovery
+* Storage Manager
+* File Manager
+* Cheat Manager
+* Reboot
+* Power Off
 
 ### Plugins Manager
 Toggle any plugin, remove duplicates, clean config.txt, re-enable missing files, save changes.
 
 ### Advanced Tools
-- CPU Speed presets (not working yet)
-- Registry Hacks
-- Reset VSH (restart LiveArea)
-- Suspend / Shut Down / Reboot
-- System Write Mode (with full warning dialog — enables os0/vs0 writes)
-- Boot Diagnostics (detailed health check)
-- Boot Recovery Installer (one-click install/uninstall of the R-trigger plugin)
+* CPU Speed presets (not working yet)
+* Registry Hacks
+* Reset VSH (restart LiveArea)
+* Suspend / Shut Down / Reboot
+* System Write Mode (with full warning dialog — enables os0/vs0 writes)
+* Boot Diagnostics (detailed health check)
+* Boot Recovery Installer (one-click install/uninstall of the R-trigger plugin)
 
 ### System Information
 Firmware, model, Enso status, motherboard, clocks, battery health, memory, active tai config path, mount points.
 
 ### Restore / Unbrick
-- Safe Mode Boot
-- Reset taiHEN config
-- Backup / Restore ux0:tai/
-- Rebuild LiveArea Database
-- Official Sony recovery options
+* Safe Mode Boot
+* Reset taiHEN config
+* Backup / Restore ux0:tai/
+* Rebuild LiveArea Database
+* Official Sony recovery options
 
 ### Plugin Fix Mode
 Safe Mode (disable all non-essential plugins), View & Toggle, Re-enable All, Reset to Minimal, Backup / Restore config.
@@ -71,19 +71,19 @@ Safe Mode (disable all non-essential plugins), View & Toggle, Re-enable All, Res
 Exact replicas of Sony’s safe-mode options (Restart, Rebuild Database, Format Memory Card, Restore System, Update Firmware) with clear danger warnings.
 
 ### Storage Manager (SD2Vita)
-- Card & Config Info
-- Switch mount points (ux0 / uma0 / grw0)
-- Install StorageMgr plugin
-- Copy ux0 ↔ SD2Vita (both directions)
-- Format SD card / Erase SD2Vita data (with red danger labels)
+* Card & Config Info
+* Switch mount points (ux0 / uma0 / grw0)
+* Install StorageMgr plugin
+* Copy ux0 ↔ SD2Vita (both directions)
+* Format SD card / Erase SD2Vita data (with red danger labels)
 
 ### File Manager
 Full partition browser (ux0, ur0, vs0, os0, etc.) with create folder and operations support.
 
 ### Cheat Manager
-- Vita Native Cheats (.psv) via VitaCheat
-- PSP CWCheat (.db) support
-- Changes saved to disk and applied on next game launch.
+* Vita Native Cheats (.psv) via VitaCheat
+* PSP CWCheat (.db) support
+* Changes saved to disk and applied on next game launch.
 
 ## Installation
 
@@ -147,3 +147,91 @@ flowchart TD
     M --> N[Recovery menu loads instead of LiveArea]
 
     G --> O[Continue normal boot to LiveArea]
+## Credits & Thanks to the Homebrew Scenes
+
+This recovery menu stands on the shoulders of giants. The PSP and PS Vita homebrew communities have been collaborative, innovative, and persistent for over two decades. Without their exploits, tools, libraries, and shared knowledge, none of this would exist.
+
+### PSP Scene Pioneers (2005–2010) – The Revolution Begins
+
+These trailblazers cracked the PSP wide open, creating the first homebrew enablers and Custom Firmwares (CFW) that inspired everything that followed.
+
+- **Dark_AleX** (Dark Alex) — The absolute legend who started it all. Creator of OE (Open Edition), SE, and M33 series CFW (3.51–5.00+). His work enabled safe homebrew execution and updates on PSPs worldwide. Often called the "father" of PSP modding.
+- **Team M33** (including Dark_AleX under pseudonym, Adrahil, Yoshiro/Miriam, Helldashx, and others) — Developed the iconic M33 CFW line after OE/SE. Continued innovations post-2007.
+- **Total_Noob** — Long-time PSP developer with tools, plugins, and scene involvement across eras.
+- **Fanjita** — Early exploit collaborator with Dark_AleX.
+- **nem** — Created the very first PSP exploit (2005 TIFF on 1.0 firmware).
+- **Davee** (Team Typhoon) — ChickHEN for newer PSP models (bridged to full CFW).
+- Other early notables: Liquidzigong, Team GEN, various PSP-Archive maintainers.
+
+### PS Vita Scene (2016–Present) – Kernel Hacks & Modern Tools
+
+The Vita scene built on PSP foundations with deep reversing and safe, persistent hacks.
+
+- **Team Molecule** (yifanlu, Davee, Proxima, xyz, mathieulh, and others) — The core group that reverse-engineered the Vita kernel. Created **HENkaku** (initial exploit), **taiHEN** (plugin framework), and **Ensō** (permanent coldboot CFW). Their work is the foundation for almost all modern Vita homebrew.
+- **TheOfficialFloW** (The Flow) — One of the most prolific Vita developers. Creator of **VitaShell** (essential file manager), **Modoru** (the downgrader), **Adrenaline** (PSP emulator on Vita), and countless tools/utilities.
+- **SKGleba** — Modern maintainer and powerhouse. Updated/forked **Modoru** for higher firmwares, created **VitaDeploy** (all-in-one toolbox), enso_ex, IMCUnlock, CBS, and many SD2Vita/storage tools.
+- **Freakler** — Tools like ConsoleID, Fingerprint, and various utilities.
+- **xerpi** — Vital libraries (ftpvitalib, vita2dlib) used in hundreds of projects.
+- **Rinnegatamante** — Massive ports, emulators, and game enhancements.
+- **cuevavirus** — Maintained and updated taiHEN.
+- **devnoname120** — VHBB (Vita homebrew browser/app store).
+- **Other major contributors** (alphabetical, from GitHub credits, vita.hacks.guide, and community acknowledgments):
+  - 173210
+  - aerosoul
+  - ColdBird
+  - cpasjuste
+  - der0ad (wargio)
+  - dots-tb
+  - frangarcj
+  - Hykem
+  - LemonHaze
+  - MajorTom
+  - motoharu
+  - mr.gas
+  - Nkekev
+  - PrincessOfSleeping
+  - qwikrazor87
+  - SilicaAndPina
+  - SocraticBliss
+  - Sorvigolova
+  - St4rk
+  - sys (yasen)
+  - velocity
+
+### Special Thanks
+- The entire **r/vitahacks** community (Reddit) for guides, testing, and support.
+- **vita.hacks.guide** maintainers — The definitive modern resource.
+- **GameBrew**, **PSDevWiki**, and **PSP-Archive** for preserving history.
+- All plugin authors (StorageMgr, rePatch, NoNpDrm, etc.) whose work is used daily.
+- Testers, translators, documenters, and everyone who shared knowledge on forums like GBAtemp, PSX-Place, and DCEmu.
+
+If I've missed someone important (especially from your own testing or inspirations), feel free to add them — the scene is huge and collaborative. Massive respect to everyone who kept the Vita (and PSP) alive long after official support ended.
+
+## Safety Features Built In
+
+- Never touches vs0:/os0: unless you manually enable System Write Mode (with big red warning).
+- Config backups on every install/uninstall.
+- L-trigger safe mode bypass.
+- Atomic operations prevent corrupted config.txt.
+
+## Current Limitations
+
+- R-trigger boot redirect is not working yet
+  The plugin installs correctly and the menu shows “INSTALLED”, but holding R (or R+L) at power-on still boots to normal LiveArea. We believe this is a controller-initialization timing issue in the kernel hook on certain firmwares (especially 3.60 OLED). Normal launch of the bubble works fine. Fix in progress.
+- Modoru integration (planned)
+  The ultimate goal is to embed Modoru (the downgrader) directly into the Restore/Unbrick section. This would let you fully resurrect a soft-bricked Vita from the recovery menu itself without needing a PC or another working device. Not implemented yet, but the architecture is ready for it.
+
+## Troubleshooting
+
+- R-trigger does nothing → Use the bubble to launch for now. Check that boot_recovery.skprx exists in ur0:recovery/ and the line is present under *KERNEL in your tai config.
+- Boot Diagnostics shows warnings → Use Plugin Fix Mode → Safe Mode or reinstall HENkaku/Enso from the menu.
+- Storage issues → Storage Manager can migrate data, switch mount points, and format safely.
+- Need to remove the recovery plugin → Run Uninstall Boot Recovery from the installer or manually delete the line from config.txt.
+
+## Future Plans
+
+- Fix R/L trigger timing (increase polling retries + better early-exit logic)
+- Full Modoru integration for one-click downgrade/restore
+- Add more diagnostic tools (NAND health, deep partition repair)
+- Theme support and better UI polish
+- Auto-update checker for the recovery menu itself
