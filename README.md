@@ -51,7 +51,7 @@ This applies to **all PS Vita models**, including:
 By using this software, you acknowledge and accept that:
 
 1. You are solely responsible for any damage, data loss, or bricking that occurs to your device.
-2. The developers of PS Vita Recovery Menu bear no liability for any outcome resulting from the use of this software.
+2. The developer of PS Vita Recovery Menu bear no liability for any outcome resulting from the use of this software.
 3. You have a basic understanding of PS Vita custom firmware and the risks involved in modifying system files.
 4. You have backed up any important data before performing recovery or restoration operations.
 
