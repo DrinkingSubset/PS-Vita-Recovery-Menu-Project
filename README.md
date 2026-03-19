@@ -55,7 +55,7 @@ Toggle any plugin, remove duplicates, clean config.txt, re-enable missing files,
 * Boot Recovery Installer (one-click install/uninstall of the R-trigger plugin)
 
 ### System Information
-Firmware, model, Enso status, motherboard, clocks, battery health, memory, active tai config path, mount points.
+Firmware, model (still needs fixing), Enso status (still needs fixing), motherboard (still needs fixing), clocks, battery health, memory, active tai config path, mount points (still needs fixing).
 
 ### Restore / Unbrick
 * Safe Mode Boot
