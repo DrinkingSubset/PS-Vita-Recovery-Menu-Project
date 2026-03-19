@@ -18,6 +18,58 @@ Thank you for trying it out, and thank you to the entire Vita homebrew community
 
 March 2026
 
+#### ⚠️ Disclaimer
+
+**Read this carefully before using PS Vita Recovery Menu.**
+
+This software is provided **as-is**, with no warranty of any kind. Use it entirely at your own risk.
+
+### What this tool can and cannot do
+
+PS Vita Recovery Menu is designed to assist with **software-level** issues on PS Vita systems running custom firmware (HENkaku, h-encore, h-encore2, Ensō). It can help recover from:
+
+- Corrupted or misconfigured `config.txt` files
+- Plugin conflicts causing boot loops
+- Broken LiveArea databases
+- Misconfigured storage mount points
+- General CFW misconfigurations
+
+**This tool cannot recover a fully hard-bricked PS Vita.** If your device does not power on, does not display anything on screen, or has suffered damage at the hardware or NAND level, no software tool — including this one — can help. A hard brick at the hardware level requires physical repair or specialized recovery equipment that is beyond the scope of this project.
+
+### Risk of bricking
+
+Certain operations available in this application — including but not limited to modifying system partitions, deleting core system files, resetting the tai configuration, or applying unsafe plugin configurations — **can result in a soft brick or, in worst-case scenarios, a hard brick of your PS Vita**, rendering it permanently unusable.
+
+This applies to **all PS Vita models**, including:
+- PS Vita PCH-1000 / PCH-1001 (OLED)
+- PS Vita PCH-1100 / PCH-1101 (OLED 3G)
+- PS Vita PCH-2000 / PCH-2001 (Slim LCD)
+- PlayStation TV (VTE-1000 / CEM-3000)
+
+### Your responsibility
+
+By using this software, you acknowledge and accept that:
+
+1. You are solely responsible for any damage, data loss, or bricking that occurs to your device.
+2. The developers of PS Vita Recovery Menu bear no liability for any outcome resulting from the use of this software.
+3. You have a basic understanding of PS Vita custom firmware and the risks involved in modifying system files.
+4. You have backed up any important data before performing recovery or restoration operations.
+
+### Recommendations before use
+
+- Always back up `ux0:tai/config.txt` and `ur0:tai/config.txt` before making any changes.
+- Use the **Backup tai/** function under Restore / Unbrick before proceeding with any repair operation.
+- Test changes on one device before applying to others.
+- If unsure about an operation, do not proceed.
+
+**This tool is intended for experienced PS Vita CFW users who understand the risks. It is not a magic fix-all solution and should be treated with the same caution as any other system-level utility.**
+
+### No Liability
+
+The creator and developer of PS Vita Recovery Menu (**DrinkingSubset**) is **not responsible** for any damage, data loss, soft brick, hard brick, or any other consequence that occurs as a result of using this software. This includes but is not limited to: accidental deletion of system files, incorrect configuration changes, failed recovery attempts, or any unintended side effects on your device or data.
+
+**You use this software at your own risk. Full stop.**
+
 ### Screenshot of the Main Recovery Menu
 
 ![PS Vita Recovery Menu Screenshot](VitaRecovery%20Screenshots/2026-03-08-161955.png)
