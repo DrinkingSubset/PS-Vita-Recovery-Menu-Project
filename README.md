@@ -46,7 +46,7 @@ This project gives you a complete toolkit for plugin management, system diagnost
 Toggle any plugin, remove duplicates, clean config.txt, re-enable missing files, save changes.
 
 ### Advanced Tools
-* CPU Speed presets (not working yet)
+* CPU Speed presets
 * Registry Hacks
 * Reset VSH (restart LiveArea)
 * Suspend / Shut Down / Reboot
