@@ -146,7 +146,8 @@ flowchart TD
     L --> M[TAI_NEXT → normal launch path but to recovery app]
     M --> N[Recovery menu loads instead of LiveArea]
 
-    G --> O[Continue normal boot to LiveArea]
+    G --> O[Continue normal boot to LiveArea] ```
+
 
 
 ## Credits & Thanks to the Homebrew Scenes
