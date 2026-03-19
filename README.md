@@ -147,6 +147,8 @@ flowchart TD
     M --> N[Recovery menu loads instead of LiveArea]
 
     G --> O[Continue normal boot to LiveArea]
+```
+  
 
 ## Credits & Thanks to the Homebrew Scenes
 
