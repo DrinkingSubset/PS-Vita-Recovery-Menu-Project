@@ -18,6 +18,12 @@ Thank you for trying it out, and thank you to the entire Vita homebrew community
 
 March 2026
 
+### Screenshot of the Main Recovery Menu
+
+![PS Vita Recovery Menu Screenshot](VitaRecovery%20Screenshots/2026-03-08-161955.png)
+
+*Example of the main menu interface on a PS Vita 1000 (OLED)*
+
 ## PS Vita Recovery Menu v1.0
 
 A powerful custom recovery environment for the PS Vita (and PSTV) running HENkaku Ensō.
