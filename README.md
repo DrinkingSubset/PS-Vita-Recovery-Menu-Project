@@ -291,8 +291,9 @@ If I've missed someone important (especially from your own testing or inspiratio
 
 ## Future Plans
 
-- Fix R/L trigger timing (increase polling retries + better early-exit logic)
+- Fix R trigger timing (increase polling retries + better early-exit logic)
 - Full Modoru integration for one-click downgrade/restore
 - Add more diagnostic tools (NAND health, deep partition repair)
 - Theme support and better UI polish
 - Auto-update checker for the recovery menu itself
+- FTP Server Support
