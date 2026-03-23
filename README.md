@@ -86,7 +86,7 @@ The creator and developer of PS Vita Recovery Menu (**DrinkingSubset**) is **not
 
 A custom recovery environment for the PS Vita (and PSTV) running HENkaku / h-encore / Ensō.
 Hold R at power-on to boot directly into the recovery menu.
-Provides a complete toolkit for plugin management, system diagnostics, unbricking, storage repair, CPU control, FTP access, and more.
+Provides a complete toolkit for plugin management, system diagnostics, unbricking, storage repair, CPU control, and more.
 
 ## Features
 
@@ -232,8 +232,6 @@ flowchart TD
 - Config backed up before every install/uninstall operation.
 - Atomic config writes (`.tmp` → rename) prevent corruption on power loss.
 - L-trigger at boot triggers safe mode — disables non-essential plugins before menu opens.
-- FTP server only activates on demand — zero overhead when not in use.
-
 ---
 
 ## Known Issues
@@ -250,39 +248,66 @@ flowchart TD
 - Per-TitleID CPU clock profiles
 - Registry editor
 - Full Modoru integration for one-click downgrade/restore
-- FTP Server
 
 ---
 
-## Credits & Thanks to the Homebrew Scene
+## Credits & Thanks to the Homebrew Scenes
 
 This recovery menu stands on the shoulders of giants. The PSP and PS Vita homebrew communities have been collaborative, innovative, and persistent for over two decades. Without their exploits, tools, libraries, and shared knowledge, none of this would exist.
 
-### PSP Scene Pioneers (2005–2010)
+### PSP Scene Pioneers (2005–2010) – The Revolution Begins
 
-- **Dark_AleX** — Creator of OE, SE, and M33 CFW. Often called the father of PSP modding.
-- **Team M33** — Continued the M33 CFW line after OE/SE.
-- **Total_Noob** — Long-time PSP developer.
-- **Fanjita** — Early exploit collaborator.
+These trailblazers cracked the PSP wide open, creating the first homebrew enablers and Custom Firmwares (CFW) that inspired everything that followed.
+
+- **Dark_AleX** (Dark Alex) — The absolute legend who started it all. Creator of OE (Open Edition), SE, and M33 series CFW (3.51–5.00+). His work enabled safe homebrew execution and updates on PSPs worldwide. Often called the "father" of PSP modding.
+- **Team M33** (including Dark_AleX under pseudonym, Adrahil, Yoshiro/Miriam, Helldashx, and others) — Developed the iconic M33 CFW line after OE/SE. Continued innovations post-2007.
+- **Total_Noob** — Long-time PSP developer with tools, plugins, and scene involvement across eras.
+- **Fanjita** — Early exploit collaborator with Dark_AleX.
 - **nem** — Created the very first PSP exploit (2005 TIFF on 1.0 firmware).
-- **Davee** (Team Typhoon) — ChickHEN for newer PSP models.
+- **Davee** (Team Typhoon) — ChickHEN for newer PSP models (bridged to full CFW).
+- Other early notables: Liquidzigong, Team GEN, various PSP-Archive maintainers.
 
-### PS Vita Scene (2016–Present)
+### PS Vita Scene (2016–Present) – Kernel Hacks & Modern Tools
 
-- **Team Molecule** (yifanlu, Davee, Proxima, xyz, mathieulh, and others) — Created HENkaku, taiHEN, and Ensō. The foundation for all modern Vita homebrew.
-- **TheOfficialFloW** — VitaShell, Modoru, Adrenaline, and countless tools.
-- **SKGleba** — VitaDeploy, enso_ex, IMCUnlock, and many storage tools.
-- **Freakler** — ConsoleID, Fingerprint, and various utilities.
-- **xerpi** — ftpvitalib, vita2dlib.
+The Vita scene built on PSP foundations with deep reversing and safe, persistent hacks.
+
+- **Team Molecule** (yifanlu, Davee, Proxima, xyz, mathieulh, and others) — The core group that reverse-engineered the Vita kernel. Created **HENkaku** (initial exploit), **taiHEN** (plugin framework), and **Ensō** (permanent coldboot CFW). Their work is the foundation for almost all modern Vita homebrew.
+- **TheOfficialFloW** (The Flow) — One of the most prolific Vita developers. Creator of **VitaShell** (essential file manager), **Modoru** (the downgrader), **Adrenaline** (PSP emulator on Vita), and countless tools/utilities.
+- **SKGleba** — Modern maintainer and powerhouse. Updated/forked **Modoru** for higher firmwares, created **VitaDeploy** (all-in-one toolbox), enso_ex, IMCUnlock, CBS, and many SD2Vita/storage tools.
+- **Freakler** — Tools like ConsoleID, Fingerprint, and various utilities.
+- **xerpi** — Vital libraries (ftpvitalib, vita2dlib) used in hundreds of projects.
 - **Rinnegatamante** — Massive ports, emulators, and game enhancements.
-- **cuevavirus** — taiHEN maintenance.
-- **devnoname120** — VHBB (Vita Homebrew Browser).
+- **cuevavirus** — Maintained and updated taiHEN.
+- **devnoname120** — VHBB (Vita homebrew browser/app store).
 - **LiEnby** — Technical corrections and feedback that improved this project's accuracy.
-- Other contributors: 173210, aerosoul, ColdBird, cpasjuste, dots-tb, frangarcj, Hykem, LemonHaze, motoharu, Nkekev, PrincessOfSleeping, qwikrazor87, SilicaAndPina, SocraticBliss, Sorvigolova, St4rk, velocity, and many more.
+- **Other major contributors** (alphabetical, from GitHub credits, vita.hacks.guide, and community acknowledgments):
+  - 173210
+  - aerosoul
+  - ColdBird
+  - cpasjuste
+  - der0ad (wargio)
+  - dots-tb
+  - frangarcj
+  - Hykem
+  - LemonHaze
+  - MajorTom
+  - motoharu
+  - mr.gas
+  - Nkekev
+  - PrincessOfSleeping
+  - qwikrazor87
+  - SilicaAndPina
+  - SocraticBliss
+  - Sorvigolova
+  - St4rk
+  - sys (yasen)
+  - velocity
 
 ### Special Thanks
-- The entire **r/vitahacks** community for guides, testing, and support.
+- The entire **r/vitahacks** community (Reddit) for guides, testing, and support.
 - **vita.hacks.guide** maintainers — The definitive modern resource.
-- **PSDevWiki**, **GameBrew**, and **PSP-Archive** for preserving scene history.
-- All plugin authors (StorageMgr, rePatch, NoNpDrm, YAMT, PSVshell, etc.) whose work is used daily.
-- Everyone who tested, reported bugs, and gave feedback — especially early testers who helped catch real hardware issues.
+- **GameBrew**, **PSDevWiki**, and **PSP-Archive** for preserving history.
+- All plugin authors (StorageMgr, rePatch, NoNpDrm, etc.) whose work is used daily.
+- Testers, translators, documenters, and everyone who shared knowledge on forums like GBAtemp, PSX-Place, and DCEmu.
+
+If I've missed someone important (especially from your own testing or inspirations), feel free to add them — the scene is huge and collaborative. Massive respect to everyone who kept the Vita (and PSP) alive long after official support ended.
