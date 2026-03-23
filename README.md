@@ -248,6 +248,7 @@ flowchart TD
 - Per-TitleID CPU clock profiles
 - Registry editor
 - Full Modoru integration for one-click downgrade/restore
+- FTP Server
 
 ---
 
