@@ -309,3 +309,5 @@ The Vita scene built on PSP foundations with deep reversing and safe, persistent
 - **GameBrew**, **PSDevWiki**, and **PSP-Archive** for preserving history.
 - All plugin authors (StorageMgr, rePatch, NoNpDrm, etc.) whose work is used daily.
 - Testers, translators, documenters, and everyone who shared knowledge on forums like GBAtemp, PSX-Place, and DCEmu.
+
+ If I've missed someone important (especially from your own testing or inspirations), feel free to add them — the scene is huge and collaborative. Massive respect to everyone who kept the Vita (and PSP) alive long after official support ended. 
