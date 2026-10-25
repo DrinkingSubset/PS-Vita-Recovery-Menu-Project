@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include "debugScreen.h"
+#include "version.h"
 
 #define SCREEN_W     960
 #define SCREEN_H     544
@@ -43,3 +44,7 @@ void display_text(int x, int y, uint32_t color, const char *str);
 void display_text_transp(int x, int y, uint32_t color, const char *str);
 void display_textf(int x, int y, uint32_t color, const char *fmt, ...);
 int  display_text_width(const char *str);
+
+/* Draws "PS Vita Recovery Menu vX.Y.Z" at the left and "By DrinkingSubset"
+ * at the far right of the title bar, both on row y. */
+void display_app_title(int y);

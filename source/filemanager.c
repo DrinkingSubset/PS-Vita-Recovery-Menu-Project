@@ -88,7 +88,7 @@ static int btn_pressed(SceCtrlData *n, SceCtrlData *o, unsigned int b) {
 
 static void fm_titlebar(const char *path, int readonly) {
     display_rect(0, 0, SCREEN_W, FM_TITLE_LINE, COLOR_TITLE_BG);
-    draw_text(MENU_X, 6,  COLOR_TEXT, "PS Vita Recovery Menu v1.0");
+    display_app_title(6);
     if (readonly)
         draw_text(MENU_X, 26, COLOR_RED, "[READ-ONLY]");
     else

@@ -23,6 +23,7 @@ extern int g_cpu_arm_idx;
 extern int g_cpu_es4_idx;
 extern int g_cpu_bus_idx;
 extern int g_cpu_xbr_idx;
+extern int g_cpu_set_err[4];   /* last scePowerSet* result per domain */
 
 /* ── API ──────────────────────────────────────────────────────────────────── */
 

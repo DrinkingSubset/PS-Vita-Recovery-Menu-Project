@@ -66,7 +66,7 @@ static void ri_message(const char *line1, const char *line2, uint32_t col) {
         display_start();
         display_clear(COLOR_BG);
         display_rect(0, 0, SCREEN_W, RI_TITLE_LINE, COLOR_TITLE_BG);
-        display_text(MENU_X, 6,  COLOR_TEXT,   "PS Vita Recovery Menu v1.0");
+        display_app_title(6);
         display_text(MENU_X, 26, COLOR_YELLOW, "Boot Recovery Installer");
         display_hline(0, RI_TITLE_LINE, SCREEN_W, COLOR_GREEN);
 
@@ -98,7 +98,7 @@ static int ri_confirm(const char *prompt, const char *detail) {
         display_start();
         display_clear(COLOR_BG);
         display_rect(0, 0, SCREEN_W, RI_TITLE_LINE, COLOR_TITLE_BG);
-        display_text(MENU_X, 6,  COLOR_TEXT,   "PS Vita Recovery Menu v1.0");
+        display_app_title(6);
         display_text(MENU_X, 26, COLOR_YELLOW, "Boot Recovery Installer");
         display_hline(0, RI_TITLE_LINE, SCREEN_W, COLOR_GREEN);
 
@@ -549,7 +549,7 @@ void recovery_installer_run(void) {
 
         /* Title */
         display_rect(0, 0, SCREEN_W, RI_TITLE_LINE, COLOR_TITLE_BG);
-        display_text(MENU_X, 6,  COLOR_TEXT,   "PS Vita Recovery Menu v1.0");
+        display_app_title(6);
         display_text(MENU_X, 26, COLOR_YELLOW, "Boot Recovery Installer");
         display_hline(0, RI_TITLE_LINE, SCREEN_W, COLOR_GREEN);
 

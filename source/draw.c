@@ -30,7 +30,7 @@ void draw_menu(void *unused, Menu *menu) {
 
     /* ── Title bar ── */
     display_rect(0, 0, SCREEN_W, CONTENT_TOP - 2, COLOR_TITLE_BG);
-    display_text(MENU_X, 4,  COLOR_TEXT, "PS Vita Recovery Menu v1.0");
+    display_app_title(4);
     /* Show config path next to title when the menu provides one */
     if (menu->subtitle && menu->subtitle[0]) {
         char title_line[128];

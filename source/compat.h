@@ -46,6 +46,10 @@ typedef struct {
     FwTier    fw_tier;
     char      fw_string[16];     /* raw version e.g. "3.65"           */
     char      fw_display[16];    /* display version e.g. "3.65"       */
+    char      fw_reported[16];   /* version the syscall reports ("" if none) */
+    int       fw_from_os0;       /* 1 = version read from os0 partition      */
+    int       dbg_os0_ret;       /* read_fw_from_partition() result          */
+    int       dbg_hw_ret;        /* _vshSysconGetHardwareInfo() result       */
     char      motherboard[32];   /* e.g. "IRS-1001 (3G)"             */
     int       has_imc0;          /* 1 if imc0: accessible             */
     int       has_enso;          /* 1 if Ensō boot_config present     */
@@ -75,4 +79,5 @@ static inline FwTier    compat_fw_tier(void)      { return g_compat.fw_tier; }
 
 const char *compat_model_name(void);
 const char *compat_fw_tier_name(void);
+const char *compat_exploit_name(void);   /* "Enso (permanent CFW)" when installed */
 void        compat_get_summary(char *out, int out_size);

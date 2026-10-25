@@ -276,7 +276,7 @@ static int btn_pressed(SceCtrlData *n, SceCtrlData *o, unsigned int b) {
 
 static void s2v_titlebar(const char *subtitle) {
     display_rect(0, 0, SCREEN_W, TITLE_LINE, COLOR_TITLE_BG);
-    draw_text(MENU_X, 6,  COLOR_TEXT, "PS Vita Recovery Menu v1.0");
+    display_app_title(6);
     draw_text(MENU_X, 26, COLOR_DIM,  subtitle);
     display_hline(0, TITLE_LINE, SCREEN_W, COLOR_GREEN);
 }

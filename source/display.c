@@ -56,3 +56,9 @@ void display_textf(int x, int y, uint32_t color, const char *fmt, ...) {
 int display_text_width(const char *str) {
     return (int)strlen(str) * 16;
 }
+
+void display_app_title(int y) {
+    display_text(MENU_X, y, COLOR_TEXT, APP_TITLE);
+    int cx = SCREEN_W - MENU_X - display_text_width(APP_CREDIT);
+    display_text(cx, y, COLOR_TEXT, APP_CREDIT);
+}

@@ -21,6 +21,8 @@
 #include "plugin_fix.h"
 #include "diag.h"
 #include "recovery_installer.h"
+#include "ftp_server.h"
+#include "update.h"
 #include "compat.h"
 
 // ── Forward declarations ──────────────────────────────────────────────────────
@@ -30,7 +32,7 @@ static Menu *build_advanced_menu(void);
 static Menu *build_registry_menu(void);
 static void build_plugins_menu_impl(Menu *parent);
 
-static MenuItem g_main_items[16];
+static MenuItem g_main_items[20];
 static Menu     g_main_menu;
 
 static MenuItem g_advanced_items[14];
@@ -57,6 +59,8 @@ static int g_show_diag           = 0;
 int g_safemode_applied = 0;   /* set by main.c if L-trigger safe mode ran */
 static int g_show_ri             = 0;
 static int g_exit_requested      = 0;
+static int g_show_ftp             = 0;
+static int g_show_update          = 0;
 
 // ── Action callbacks ──────────────────────────────────────────────────────────
 /* Show a simple red error message and wait for O press */
@@ -70,7 +74,7 @@ static void menu_show_error(const char *msg, int err_code) {
         display_start();
         display_clear(COLOR_BG);
         display_rect(0, 0, SCREEN_W, TITLE_LINE, COLOR_TITLE_BG);
-        display_text(MENU_X, 4,  COLOR_TEXT, "PS Vita Recovery Menu v1.0");
+        display_app_title(4);
         display_hline(0, TITLE_LINE, SCREEN_W, COLOR_GREEN);
         display_text(MENU_X, TITLE_H + 20, COLOR_RED,  msg);
         display_text(MENU_X, TITLE_H + 44, COLOR_DIM,  errbuf);
@@ -95,6 +99,8 @@ static void action_show_plugin_fix(void)    { g_show_plugin_fix  = 1; }
 int menu_dev_unlock_enabled(void)           { return g_dev_unlock; }
 static void action_show_diag(void)          { g_show_diag = 1; }
 static void action_show_ri(void)            { g_show_ri   = 1; }
+static void action_show_ftp(void)           { g_show_ftp  = 1; }
+static void action_show_update(void)        { g_show_update = 1; }
 static void action_clean_config(void) {
     // Show warning first
     display_start();
@@ -215,7 +221,7 @@ static void action_toggle_dev_unlock(void) {
         display_start();
         display_clear(COLOR_BG);
         display_rect(0, 0, SCREEN_W, TITLE_LINE, COLOR_TITLE_BG);
-        display_text(MENU_X, 4,  COLOR_TEXT,   "PS Vita Recovery Menu v1.0");
+        display_app_title(4);
         display_text(MENU_X, 26, COLOR_RED,    "Advanced -- System Write Mode");
         display_hline(0, TITLE_LINE, SCREEN_W, COLOR_GREEN);
         /* Warning box */
@@ -399,7 +405,9 @@ static void build_main_menu_impl(void) {
     g_main_items[n++] = (MenuItem){ "Sony Recovery",        ITEM_ACTION,   0, action_show_official_rec, NULL };
     g_main_items[n++] = (MenuItem){ "Storage Manager",      ITEM_ACTION,   0, action_show_sd2vita,      NULL };
     g_main_items[n++] = (MenuItem){ "File Manager",     ITEM_ACTION,   0, action_show_filemanager,  NULL };
+    g_main_items[n++] = (MenuItem){ "FTP Server",        ITEM_ACTION,   0, action_show_ftp,          NULL };
     g_main_items[n++] = (MenuItem){ "Cheat Manager",    ITEM_ACTION,   0, action_show_cheats,       NULL };
+    g_main_items[n++] = (MenuItem){ "Check for Updates", ITEM_ACTION,  0, action_show_update,       NULL };
     g_main_items[n++] = (MenuItem){ "",                     ITEM_SEPARATOR,0, NULL,                     NULL };
     g_main_items[n++] = (MenuItem){ "Reboot",               ITEM_ACTION,   0, action_reboot,            NULL };
     g_main_items[n++] = (MenuItem){ "Power Off",            ITEM_ACTION,   0, action_poweroff,          NULL };
@@ -569,6 +577,18 @@ void menu_run(void) {
         if (g_show_plugin_fix) {
             g_show_plugin_fix = 0;
             plugin_fix_run(NULL);
+            memset(&old_ctrl, 0, sizeof(old_ctrl));
+            continue;
+        }
+        if (g_show_ftp) {
+            g_show_ftp = 0;
+            ftp_screen_run();
+            memset(&old_ctrl, 0, sizeof(old_ctrl));
+            continue;
+        }
+        if (g_show_update) {
+            g_show_update = 0;
+            update_screen_run();
             memset(&old_ctrl, 0, sizeof(old_ctrl));
             continue;
         }

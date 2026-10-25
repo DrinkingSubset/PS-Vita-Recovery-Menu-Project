@@ -5,7 +5,27 @@ include("${VITASDK}/share/vita.cmake" REQUIRED)
 
 set(VITA_APP_NAME "PS Vita Recovery")
 set(VITA_TITLEID  "RECM00001")
-set(VITA_VERSION  "01.00")
+
+# ── Version: single source of truth is the VERSION file (e.g. 1.0.8) ──────
+# Run ./bump_version.sh before each new build to increment it.
+file(READ "${CMAKE_SOURCE_DIR}/VERSION" APP_VERSION)
+string(STRIP "${APP_VERSION}" APP_VERSION)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/VERSION")
+if(NOT APP_VERSION MATCHES "^([0-9]+)\\.([0-9])\\.([0-9])$")
+    message(FATAL_ERROR "VERSION file must look like 1.0.8 (got '${APP_VERSION}')")
+endif()
+# param.sfo only holds "MM.mm", so pack minor+patch into the second field:
+#   1.0.8 -> 01.08   1.1.0 -> 01.10   1.9.9 -> 01.99   2.0.0 -> 02.00
+math(EXPR _sfo_minor "${CMAKE_MATCH_2} * 10 + ${CMAKE_MATCH_3}")
+set(_sfo_major "${CMAKE_MATCH_1}")
+if(_sfo_major LESS 10)
+    set(_sfo_major "0${_sfo_major}")
+endif()
+if(_sfo_minor LESS 10)
+    set(_sfo_minor "0${_sfo_minor}")
+endif()
+set(VITA_VERSION "${_sfo_major}.${_sfo_minor}")
+message(STATUS "Building PS Vita Recovery Menu v${APP_VERSION} (SFO version ${VITA_VERSION})")
 
 # ── Step 1: Build boot_recovery.skprx (kernel plugin) ─────────────────────
 add_custom_command(
@@ -61,6 +81,9 @@ add_executable(${PROJECT_NAME}
     source/plugin_fix.c
     source/diag.c
     source/recovery_installer.c
+    source/ftp_server.c
+    source/update.c
+    source/https.c
 )
 
 add_custom_target(boot_plugins ALL
@@ -69,10 +92,46 @@ add_custom_target(boot_plugins ALL
 )
 add_dependencies(${PROJECT_NAME} boot_plugins)
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE APP_VERSION="${APP_VERSION}")
+
 target_include_directories(${PROJECT_NAME} PRIVATE
     source
     $ENV{VITASDK}/share/gcc-arm-vita-eabi/samples/common
 )
+
+# The SDK's mbedTLS was built with pthread mutexes. Link libpthread if the SDK
+# has it; otherwise https.c supplies tiny single-thread replacements.
+find_library(VITA_PTHREAD pthread HINTS "$ENV{VITASDK}/arm-vita-eabi/lib")
+if(VITA_PTHREAD)
+    message(STATUS "pthread library: ${VITA_PTHREAD}")
+    set(PTHREAD_LINK pthread)
+else()
+    message(STATUS "pthread library not found: using built-in mutex stubs")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE VITA_PTHREAD_STUBS=1)
+    set(PTHREAD_LINK "")
+endif()
+
+# mbedTLS client (source/https.c) needs a random-number source from the SDK.
+# Find which stub library exports sceKernelGetRandomNumber and link it.
+set(RNG_STUB "")
+file(GLOB _stubs "$ENV{VITASDK}/arm-vita-eabi/lib/lib*_stub.a")
+foreach(_s ${_stubs})
+    execute_process(COMMAND "$ENV{VITASDK}/bin/arm-vita-eabi-nm" "${_s}"
+                    OUTPUT_VARIABLE _nm ERROR_QUIET)
+    if(_nm MATCHES "sceKernelGetRandomNumber")
+        get_filename_component(_n "${_s}" NAME_WE)
+        string(REGEX REPLACE "^lib" "" _n "${_n}")
+        set(RNG_STUB "${_n}")
+        break()
+    endif()
+endforeach()
+if(RNG_STUB)
+    message(STATUS "HTTPS random source: sceKernelGetRandomNumber (${RNG_STUB})")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_RNG=1)
+    target_link_libraries(${PROJECT_NAME} ${RNG_STUB})
+else()
+    message(WARNING "sceKernelGetRandomNumber not found in the SDK: HTTPS will use a WEAK fallback random source")
+endif()
 
 target_link_libraries(${PROJECT_NAME}
     SceCtrl_stub
@@ -87,6 +146,13 @@ target_link_libraries(${PROJECT_NAME}
     ScePromoterUtil_stub
     SceDisplay_stub
     SceVshBridge_stub
+    SceNet_stub
+    SceNetCtl_stub
+    SceHttp_stub
+    mbedtls
+    mbedx509
+    mbedcrypto
+    ${PTHREAD_LINK}
     m
     c
 )

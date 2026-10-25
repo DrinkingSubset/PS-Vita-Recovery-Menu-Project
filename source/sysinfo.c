@@ -77,7 +77,7 @@ void sysinfo_draw(void *font, int scroll_y) {
 
     /* ── Title bar (never scrolls) ── */
     display_rect(0, 0, SCREEN_W, TITLE_LINE, COLOR_TITLE_BG);
-    draw_text(MENU_X, 6,  COLOR_TEXT, "PS Vita Recovery Menu v1.0");
+    display_app_title(6);
     draw_text(MENU_X, 26, COLOR_DIM,  "System Information");
     display_hline(0, TITLE_LINE, SCREEN_W, COLOR_GREEN);
 
@@ -92,33 +92,39 @@ void sysinfo_draw(void *font, int scroll_y) {
 
     ROW("Model:", compat_model_name(), COLOR_TEXT);
 
-    /* Firmware — real from partition, flag if syscall differs */
+    /* Firmware — real version from os0 when readable, flag any mismatch */
     {
         char fwbuf[64];
-        SceKernelFwInfo sp;
-        sp.size = sizeof(sp);
-        sceKernelGetSystemSwVersion(&sp);
-        if (sp.versionString[0] &&
-            strncmp(sp.versionString, g_compat.fw_string,
-                    sizeof(g_compat.fw_string) - 1) != 0)
-            snprintf(fwbuf, sizeof(fwbuf), "%s  (syscall: %s)",
-                     g_compat.fw_display, sp.versionString);
-        else
-            snprintf(fwbuf, sizeof(fwbuf), "%s", g_compat.fw_display);
-        ROW("Firmware:", fwbuf, COLOR_TEXT);
+        uint32_t fcol = COLOR_TEXT;
+        if (g_compat.fw_from_os0) {
+            if (g_compat.fw_reported[0] &&
+                strcmp(g_compat.fw_reported, g_compat.fw_display) != 0) {
+                snprintf(fwbuf, sizeof(fwbuf), "%s  (system reports %s)",
+                         g_compat.fw_display, g_compat.fw_reported);
+                fcol = COLOR_YELLOW;
+            } else {
+                snprintf(fwbuf, sizeof(fwbuf), "%s", g_compat.fw_display);
+            }
+        } else {
+            snprintf(fwbuf, sizeof(fwbuf), "%s  (os0 unreadable)",
+                     g_compat.fw_display);
+            fcol = COLOR_YELLOW;
+        }
+        ROW("Firmware:", fwbuf, fcol);
     }
 
     /* Exploit */
     {
         uint32_t col = COLOR_GREEN;
-        if (g_compat.fw_tier == FW_367_HENCORE  ||
-            g_compat.fw_tier == FW_368_HENCORE  ||
-            g_compat.fw_tier == FW_373_HENCORE2 ||
-            g_compat.fw_tier == FW_374_HENCORE2)
+        if (!g_compat.has_enso &&
+            (g_compat.fw_tier == FW_367_HENCORE  ||
+             g_compat.fw_tier == FW_368_HENCORE  ||
+             g_compat.fw_tier == FW_373_HENCORE2 ||
+             g_compat.fw_tier == FW_374_HENCORE2))
             col = COLOR_YELLOW;
-        if (g_compat.fw_tier == FW_UNKNOWN)
+        if (!g_compat.has_enso && g_compat.fw_tier == FW_UNKNOWN)
             col = COLOR_RED;
-        ROW("Exploit:", compat_fw_tier_name(), col);
+        ROW("Exploit:", compat_exploit_name(), col);
     }
 
     /* Ensō */
@@ -208,11 +214,24 @@ void sysinfo_draw(void *font, int scroll_y) {
         ROWF("CDRAM free:",    COLOR_TEXT, "%d KB", mem.size_cdram / 1024);
     }
 
+    DIVIDER();
+
+    /* ── DETECTION DEBUG — raw values behind the model/board/firmware ── */
+    SECTION("-- Detection debug --");
+    ROWF("Model src:", COLOR_DIM, "reg=%d cdlg=%d imc0=%d",
+         g_compat.dbg_imc0_stat, g_compat.dbg_wwan, g_compat.dbg_imc0_dopen);
+    ROWF("Board src:", COLOR_DIM, "hwinfo ret=0x%08X",
+         (unsigned int)g_compat.dbg_hw_ret);
+    ROWF("FW src:", COLOR_DIM, "os0 ret=%d  syscall=%s",
+         g_compat.dbg_os0_ret,
+         g_compat.fw_reported[0] ? g_compat.fw_reported : "?");
+
     /* No-Ensō warning box */
-    if (g_compat.fw_tier == FW_367_HENCORE  ||
-        g_compat.fw_tier == FW_368_HENCORE  ||
-        g_compat.fw_tier == FW_373_HENCORE2 ||
-        g_compat.fw_tier == FW_374_HENCORE2) {
+    if (!g_compat.has_enso &&
+        (g_compat.fw_tier == FW_367_HENCORE  ||
+         g_compat.fw_tier == FW_368_HENCORE  ||
+         g_compat.fw_tier == FW_373_HENCORE2 ||
+         g_compat.fw_tier == FW_374_HENCORE2)) {
         if (y >= CONTENT_TOP && y < CONTENT_BOT) {
             y += 4;
             display_rect(MENU_X - 6, y - 2,

@@ -46,7 +46,7 @@ static void pf_drain(SceCtrlData *old) {
 
 static void pf_titlebar(const char *subtitle) {
     display_rect(0, 0, SCREEN_W, PF_TITLE_LINE, COLOR_TITLE_BG);
-    display_text(MENU_X, 6,  COLOR_TEXT, "PS Vita Recovery Menu v1.0");
+    display_app_title(6);
     display_text(MENU_X, 26, COLOR_YELLOW, subtitle[0] ? subtitle : "Plugin Fix Mode");
     display_hline(0, PF_TITLE_LINE, SCREEN_W, COLOR_GREEN);
 }
@@ -518,7 +518,7 @@ void plugin_fix_run(void *font) {
 
         /* Title */
         display_rect(0, 0, SCREEN_W, PF_TITLE_LINE, COLOR_TITLE_BG);
-        display_text(MENU_X, 6,  COLOR_TEXT,   "PS Vita Recovery Menu v1.0");
+        display_app_title(6);
         display_text(MENU_X, 26, COLOR_YELLOW, "Plugin Fix Mode");
         display_hline(0, PF_TITLE_LINE, SCREEN_W, COLOR_GREEN);
 

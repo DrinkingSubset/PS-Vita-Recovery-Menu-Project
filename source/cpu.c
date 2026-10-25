@@ -30,7 +30,7 @@ const int CPU_XBR_COUNT   = 3;
 /* ── Current indices ───────────────────────────────────────────────────── */
 int g_cpu_arm_idx = 5;   /* 333 MHz */
 int g_cpu_es4_idx = 4;   /* 222 MHz */
-int g_cpu_bus_idx = 3;   /* 166 MHz */
+int g_cpu_bus_idx = 4;   /* 222 MHz (stock) */
 int g_cpu_xbr_idx = 2;   /* 166 MHz */
 
 /* ── Init ──────────────────────────────────────────────────────────────── */
@@ -58,18 +58,21 @@ void cpu_init(void) {
 }
 
 /* ── Apply ─────────────────────────────────────────────────────────────── */
+/* Return code of the last set call per domain: 0 = OK, else the error code */
+int g_cpu_set_err[4] = { 0, 0, 0, 0 };
+
 void cpu_apply(void) {
-    scePowerSetArmClockFrequency (CPU_ARM_FREQS[g_cpu_arm_idx]);
-    scePowerSetBusClockFrequency (CPU_BUS_FREQS[g_cpu_bus_idx]);
-    scePowerSetGpuClockFrequency (CPU_ES4_FREQS[g_cpu_es4_idx]);
-    scePowerSetGpuXbarClockFrequency(CPU_XBR_FREQS[g_cpu_xbr_idx]);
+    g_cpu_set_err[0] = scePowerSetArmClockFrequency (CPU_ARM_FREQS[g_cpu_arm_idx]);
+    g_cpu_set_err[1] = scePowerSetGpuClockFrequency (CPU_ES4_FREQS[g_cpu_es4_idx]);
+    g_cpu_set_err[2] = scePowerSetBusClockFrequency (CPU_BUS_FREQS[g_cpu_bus_idx]);
+    g_cpu_set_err[3] = scePowerSetGpuXbarClockFrequency(CPU_XBR_FREQS[g_cpu_xbr_idx]);
 }
 
 void cpu_apply_default(void) {
-    g_cpu_arm_idx = 5;
-    g_cpu_es4_idx = 4;
-    g_cpu_bus_idx = 3;
-    g_cpu_xbr_idx = 2;
+    g_cpu_arm_idx = 5;   /* 333 */
+    g_cpu_es4_idx = 4;   /* 222 */
+    g_cpu_bus_idx = 4;   /* 222 (stock) */
+    g_cpu_xbr_idx = 2;   /* 166 */
     cpu_apply();
 }
 
@@ -123,6 +126,10 @@ void cpu_load_and_apply(void) {
         while (*p && *p != '\n') p++;
         if (*p == '\n') p++;
     }
+
+    /* Older builds saved a wrong "default" (bus 166). Treat that exact
+     * combination as the stock default so the bus returns to 222. */
+    if (arm == 5 && es4 == 4 && bus == 3 && xbr == 2) bus = 4;
 
     /* Validate and clamp indices */
     if (arm >= 0 && arm < CPU_ARM_COUNT) g_cpu_arm_idx = arm;
@@ -192,10 +199,13 @@ static void draw_clock_row(int base_x, int y, const char *label,
     display_text(base_x + ROW_INC_X, y,
                  can_inc ? btn_col : dim_col, ">");
 
-    /* Live readback */
+    /* Live readback — yellow when the hardware differs from the selection
+     * (ARM 500 legitimately reads back as 444). */
     char live[24];
     snprintf(live, sizeof(live), "(live: %d MHz)", live_mhz);
-    display_text(base_x + ROW_LIVE_X, y, dim_col, live);
+    int dlt = live_mhz - sel_mhz; if (dlt < 0) dlt = -dlt;
+    int mismatch = (dlt > 2) && !(sel_mhz == 500 && live_mhz == 444);
+    display_text(base_x + ROW_LIVE_X, y, mismatch ? COLOR_YELLOW : dim_col, live);
 }
 
 /* ── Main CPU screen ───────────────────────────────────────────────────── */
@@ -218,13 +228,15 @@ void cpu_screen_run(void) {
                                &g_cpu_bus_idx, &g_cpu_xbr_idx };
 
     while (1) {
-        /* scePowerGet* caps at 444 even when set to 500 — use our
-         * applied index values so the display always reflects what we set. */
+        /* Real hardware readback, the same source System Info uses.
+         * (scePowerGet* reports 444 when ARM is set to 500.) */
+        int gpu_live = scePowerGetGpuClockFrequency();
+        if (gpu_live <= 0) gpu_live = scePowerGetGpuXbarClockFrequency();
         int live[4] = {
-            CPU_ARM_FREQS[g_cpu_arm_idx],
-            CPU_ES4_FREQS[g_cpu_es4_idx],
-            CPU_BUS_FREQS[g_cpu_bus_idx],
-            CPU_XBR_FREQS[g_cpu_xbr_idx]
+            scePowerGetArmClockFrequency(),
+            gpu_live,
+            scePowerGetBusClockFrequency(),
+            scePowerGetGpuXbarClockFrequency()
         };
 
         display_start();
@@ -232,13 +244,13 @@ void cpu_screen_run(void) {
 
         /* Title bar */
         display_rect(0, 0, SCREEN_W, TITLE_LINE, COLOR_TITLE_BG);
-        display_text(MENU_X, 6,  COLOR_TEXT,   "PS Vita Recovery Menu v1.0");
+        display_app_title(6);
         display_text(MENU_X, 26, COLOR_YELLOW, "CPU Speed Control");
         display_hline(0, TITLE_LINE, SCREEN_W, COLOR_GREEN);
 
         /* Hint — two short lines, each under 45 chars */
         int hy = TITLE_H + 6;
-        display_text(MENU_X, hy,          COLOR_DIM, "[Up/Down] Select   [L/R] Change value");
+        display_text(MENU_X, hy,          COLOR_DIM, "[Up/Down] Select   [L/R or </>] Change");
         display_text(MENU_X, hy + LINE_H, COLOR_DIM, "[Sq] Default   [Tri] PowerSave   [O] Back");
         display_hline(0, hy + LINE_H * 2 + 4, SCREEN_W, RGBA8(40, 40, 40, 255));
 
@@ -261,11 +273,30 @@ void cpu_screen_run(void) {
         int dy = row_y + 4 * (LINE_H + 10) + 8;
         display_hline(0, dy, SCREEN_W, RGBA8(40, 40, 40, 255));
         display_text(MENU_X, dy + 8, COLOR_DIM,
-                     "Default: ARM 333 / ES4 222 / BUS 166 / XBR 166 MHz");
+                     "Default: ARM 333 / ES4 222 / BUS 222 / XBR 166 MHz");
 
         if (CPU_ARM_FREQS[g_cpu_arm_idx] > 333)
             display_text(MENU_X, dy + 8 + LINE_H, COLOR_YELLOW,
                          "WARNING: Overclocking may cause instability.");
+
+        /* Report any clock the system refused to change */
+        {
+            const char *dn[4] = { "ARM", "GPU", "BUS", "XBR" };
+            char eb[96] = "";
+            for (int i = 0; i < 4; i++) {
+                if (g_cpu_set_err[i] != 0) {
+                    char t[24];
+                    snprintf(t, sizeof(t), "%s %08X  ", dn[i],
+                             (unsigned int)g_cpu_set_err[i]);
+                    strncat(eb, t, sizeof(eb) - strlen(eb) - 1);
+                }
+            }
+            if (eb[0]) {
+                display_text(MENU_X, dy + 8 + LINE_H * 2, COLOR_RED,
+                             "System refused clock change (error code):");
+                display_text(MENU_X, dy + 8 + LINE_H * 3, COLOR_RED, eb);
+            }
+        }
 
         /* Footer */
         display_rect(0, FOOTER_Y, SCREEN_W, SCREEN_H - FOOTER_Y, COLOR_TITLE_BG);
@@ -281,14 +312,16 @@ void cpu_screen_run(void) {
         if (btn(&ctrl, &old, SCE_CTRL_DOWN))
             sel = (sel + 1) % 4;
 
-        if (btn(&ctrl, &old, SCE_CTRL_LEFT)) {
+        if (btn(&ctrl, &old, SCE_CTRL_LEFT) ||
+            btn(&ctrl, &old, SCE_CTRL_LTRIGGER)) {
             if (*indices[sel] > 0) {
                 (*indices[sel])--;
                 cpu_apply();
                 cpu_save();
             }
         }
-        if (btn(&ctrl, &old, SCE_CTRL_RIGHT)) {
+        if (btn(&ctrl, &old, SCE_CTRL_RIGHT) ||
+            btn(&ctrl, &old, SCE_CTRL_RTRIGGER)) {
             if (*indices[sel] < counts[sel] - 1) {
                 (*indices[sel])++;
                 cpu_apply();
@@ -314,7 +347,7 @@ void cpu_screen_run(void) {
 /* ── Legacy preset API ─────────────────────────────────────────────────── */
 typedef struct { const char *name; int arm; int bus; } CpuPreset;
 static const CpuPreset g_presets[] = {
-    { "Default (333 MHz / 166 MHz)", 333, 166 },
+    { "Default (333 MHz / 222 MHz)", 333, 222 },
     { "Max (444 MHz / 222 MHz)",     444, 222 },
     { "Medium (222 MHz / 111 MHz)",  222, 111 },
     { "Low (111 MHz / 55 MHz)",      111,  55 },

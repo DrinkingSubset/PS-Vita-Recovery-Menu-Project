@@ -58,7 +58,7 @@ static int write_text(const char *path, const char *data) {
 /* ── Common UI ──────────────────────────────────────────────────────────── */
 static void title_bar(const char *t) {
     display_rect(0, 0, SCREEN_W, TITLE_LINE, COLOR_TITLE_BG);
-    draw_text(MENU_X, 6,  COLOR_TEXT, "PS Vita Recovery Menu v1.0");
+    display_app_title(6);
     draw_text(MENU_X, 26, COLOR_DIM,  t);
     display_hline(0, TITLE_LINE, SCREEN_W, COLOR_GREEN);
 }
@@ -587,7 +587,7 @@ void cheat_manager_screen_run(void *font) {
     while (1) {
         display_start(); display_clear(COLOR_BG);
         display_rect(0, 0, SCREEN_W, TITLE_LINE, COLOR_TITLE_BG);
-        draw_text(MENU_X, 6,  COLOR_TEXT, "PS Vita Recovery Menu v1.0");
+        display_app_title(6);
         draw_text(MENU_X, 26, COLOR_DIM,  "Cheat & Trainer Manager");
         display_hline(0, TITLE_LINE, SCREEN_W, COLOR_GREEN);
 

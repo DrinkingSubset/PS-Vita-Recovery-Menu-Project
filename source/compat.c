@@ -71,17 +71,12 @@ static int read_fw_from_partition(char *out, int out_sz,
     unsigned int ver = *(unsigned int *)(buf + 0x92);
     if (ver == 0 || ver == 0xFFFFFFFF) return -3;
 
-    /* Decode nibbles: 0x03650000 -> a=3, b=6, c=5, d=0 */
-    /* Extract as bytes: 0x03650000 -> a=0x03, b=0x65 -> "3.65" */
-    unsigned int a = (ver >> 24) & 0xFF;
-    unsigned int b = (ver >> 16) & 0xFF;
-    unsigned int hi = b / 16;
-    unsigned int lo = b % 16;
+    /* Version word is BCD: 0x03650000 -> major 0x03, minor 0x65 -> "3.65" */
+    unsigned int a     = (ver >> 24) & 0xFF;
+    unsigned int b     = (ver >> 16) & 0xFF;
+    unsigned int minor = (b >> 4) * 10 + (b & 0x0F);
 
-    if (lo)
-        snprintf(out, out_sz, "%u.%u%u%u", a, hi, lo, 0);
-    else
-        snprintf(out, out_sz, "%u.%u%u",   a, hi, lo);
+    snprintf(out, out_sz, "%u.%02u", a, minor);
 
     if (ver_out) *ver_out = ver;
     return 0;
@@ -210,7 +205,10 @@ void compat_init(void) {
         int fw_found = 0;
         unsigned int ver_num = 0;
 
-        /* Try syscall first */
+        /* Source A: the syscall. Plugins can spoof this, so it is only the
+         * "reported" version, used as a fallback and for the mismatch note. */
+        char rep_disp[16] = "";
+        unsigned int rep_num = 0;
         SceKernelFwInfo fw;
         memset(&fw, 0, sizeof(fw));
         fw.size = sizeof(fw);
@@ -219,31 +217,37 @@ void compat_init(void) {
             if (sscanf(fw.versionString, "%u.%u", &maj, &min_raw) == 2 && maj > 0) {
                 /* Handle both "03.650.011" (min_raw=650) and "3.65" (min_raw=65) */
                 unsigned int minor = (min_raw >= 100) ? min_raw / 10 : min_raw;
-                ver_num = maj * 100 + minor;
-                snprintf(c->fw_display, sizeof(c->fw_display),
-                         "%u.%02u", maj, minor);
-                snprintf(c->fw_string,  sizeof(c->fw_string),
-                         "%s", fw.versionString);
+                rep_num = maj * 100 + minor;
+                snprintf(rep_disp, sizeof(rep_disp), "%u.%02u", maj, minor);
+            }
+        }
+        snprintf(c->fw_reported, sizeof(c->fw_reported), "%s", rep_disp);
+
+        /* Source B (preferred): the real version from the active os0
+         * partition. Only accepted when it decodes to a known Vita range. */
+        char part_disp[16];
+        unsigned int part_ver = 0;
+        c->dbg_os0_ret = read_fw_from_partition(part_disp, sizeof(part_disp),
+                                                &part_ver);
+        if (c->dbg_os0_ret == 0) {
+            unsigned int a = (part_ver >> 24) & 0xFF;
+            unsigned int b = (part_ver >> 16) & 0xFF;
+            unsigned int pver = a * 100 + (b >> 4) * 10 + (b & 0x0F);
+            if (a == 3 && pver >= 300 && pver <= 374) {
+                ver_num = pver;
+                snprintf(c->fw_display, sizeof(c->fw_display), "%s", part_disp);
+                snprintf(c->fw_string,  sizeof(c->fw_string),  "%s", part_disp);
+                c->fw_from_os0 = 1;
                 fw_found = 1;
             }
         }
 
-        /* Fallback: partition read — only accept result in valid FW range */
-        if (!fw_found) {
-            char part_disp[16];
-            unsigned int part_ver = 0;
-            if (read_fw_from_partition(part_disp, sizeof(part_disp), &part_ver) == 0) {
-                unsigned int a = (part_ver >> 24) & 0xFF;
-                unsigned int b = (part_ver >> 16) & 0xFF;
-                unsigned int pver = a * 100 + b / 10;
-                /* Only trust if within known Vita firmware range 3.00 – 3.74 */
-                if (a == 3 && pver >= 300 && pver <= 374) {
-                    ver_num = pver;
-                    snprintf(c->fw_display, sizeof(c->fw_display), "%s", part_disp);
-                    snprintf(c->fw_string,  sizeof(c->fw_string),  "%s", part_disp);
-                    fw_found = 1;
-                }
-            }
+        /* Fall back to the syscall value */
+        if (!fw_found && rep_num) {
+            ver_num = rep_num;
+            snprintf(c->fw_display, sizeof(c->fw_display), "%s", rep_disp);
+            snprintf(c->fw_string,  sizeof(c->fw_string),  "%s", rep_disp);
+            fw_found = 1;
         }
 
         if (!fw_found) {
@@ -290,6 +294,7 @@ void compat_init(void) {
      */
     unsigned char hwinfo[4] = {0};
     int hw_ok = _vshSysconGetHardwareInfo(hwinfo);
+    c->dbg_hw_ret = hw_ok;
 
     /* ── Model detection — three methods, best-wins priority ────────────
      *
@@ -406,6 +411,13 @@ const char *compat_model_name(void) {
     }
 }
 
+const char *compat_exploit_name(void) {
+    /* Once Enso is installed it is what boots the CFW, whatever the
+     * firmware tier says about which exploit would otherwise be needed. */
+    if (g_compat.has_enso) return "Enso (permanent CFW)";
+    return compat_fw_tier_name();
+}
+
 const char *compat_fw_tier_name(void) {
     switch (g_compat.fw_tier) {
         case FW_360_HENKAKU:  return "HENkaku (Enso capable)";
@@ -422,7 +434,7 @@ void compat_get_summary(char *out, int out_size) {
     snprintf(out, out_size, "%s | FW %s | %s | Enso: %s",
              compat_model_name(),
              g_compat.fw_display,
-             compat_fw_tier_name(),
+             compat_exploit_name(),
              g_compat.has_enso     ? "YES" :
              g_compat.enso_capable ? "No"  : "N/A");
 }

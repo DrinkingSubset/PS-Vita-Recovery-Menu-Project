@@ -363,13 +363,14 @@ static void check_model_specific(void) {
 
     emitf(SEV_INFO, "Model: %s", compat_model_name());
     emitf(SEV_INFO, "Firmware: %s  (%s)",
-          g_compat.fw_display, compat_fw_tier_name());
+          g_compat.fw_display, compat_exploit_name());
 
     /* Warn on firmwares that lose CFW on reboot */
-    if (g_compat.fw_tier == FW_367_HENCORE  ||
-        g_compat.fw_tier == FW_368_HENCORE  ||
-        g_compat.fw_tier == FW_373_HENCORE2 ||
-        g_compat.fw_tier == FW_374_HENCORE2) {
+    if (!g_compat.has_enso &&
+        (g_compat.fw_tier == FW_367_HENCORE  ||
+         g_compat.fw_tier == FW_368_HENCORE  ||
+         g_compat.fw_tier == FW_373_HENCORE2 ||
+         g_compat.fw_tier == FW_374_HENCORE2)) {
         emit(SEV_WARN, "This FW has no Enso - re-run exploit after every reboot");
     }
 
@@ -422,7 +423,7 @@ static void diag_draw(void) {
 
     /* ── Title ── */
     display_rect(0, 0, SCREEN_W, DG_TITLE_LINE, COLOR_TITLE_BG);
-    display_text(MENU_X, 6,  COLOR_TEXT,   "PS Vita Recovery Menu v1.0");
+    display_app_title(6);
     display_text(MENU_X, 26, COLOR_YELLOW, "Boot Diagnostics");
     display_hline(0, DG_TITLE_LINE, SCREEN_W, COLOR_GREEN);
 
@@ -458,7 +459,7 @@ static void diag_draw(void) {
     display_rect(0, DG_CONTENT_B, SCREEN_W, SCREEN_H,  COLOR_BG);
     /* Restore title bar over the mask */
     display_rect(0, 0, SCREEN_W, DG_TITLE_LINE, COLOR_TITLE_BG);
-    display_text(MENU_X, 6,  COLOR_TEXT,   "PS Vita Recovery Menu v1.0");
+    display_app_title(6);
     display_text(MENU_X, 26, COLOR_YELLOW, "Boot Diagnostics");
     display_hline(0, DG_TITLE_LINE, SCREEN_W, COLOR_GREEN);
 
