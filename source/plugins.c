@@ -145,12 +145,20 @@ static int safe_write_config(const char *path,
         return -1;              /* config untouched */
     }
 
-    sceIoRemove(path);
+    /* v1.1.7: swap with the old file kept as .old until the new one is in
+     * place, so a power cut never leaves no config at all. */
+    char old[300];
+    snprintf(old, sizeof(old), "%s.old", path);
+    sceIoRemove(old);
+    int moved = (sceIoRename(path, old) >= 0);
     if (sceIoRename(aux, path) < 0) {
+        if (moved) sceIoRename(old, path);         /* roll back */
         /* Rename refused: write the config directly (backup exists) */
         r = write_all(path, data, len);
         sceIoRemove(aux);
         if (r < 0) { g_last_err = r; return -1; }
+    } else if (moved) {
+        sceIoRemove(old);
     }
 
     if (!file_matches(path, data, len)) { g_last_err = -12; return -1; }

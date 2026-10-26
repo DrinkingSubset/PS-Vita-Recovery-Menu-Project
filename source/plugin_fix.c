@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <strings.h>
 
 #include "plugin_fix.h"
 #include "plugins.h"
@@ -162,7 +163,37 @@ static int pf_backup_exists(void) {
     return (sceIoGetstat(PF_BACKUP_PATH, &st) >= 0);
 }
 
-/* Copy src -> dst atomically (write to .tmp then rename) */
+/* v1.1.7: replace dst with tmp; the old file is kept as .old until the
+ * swap succeeds, so a power cut never leaves no config at all. */
+static int pf_replace(const char *tmp, const char *dst) {
+    if (sceIoRename(tmp, dst) >= 0) return 0;
+    char old[280];
+    snprintf(old, sizeof(old), "%s.old", dst);
+    sceIoRemove(old);
+    int r = sceIoRename(dst, old);
+    if (r < 0) { sceIoRemove(tmp); return r; }
+    r = sceIoRename(tmp, dst);
+    if (r < 0) { sceIoRename(old, dst); sceIoRemove(tmp); return r; }
+    sceIoRemove(old);
+    return 0;
+}
+
+/* 1 if the file holds exactly data */
+static int pf_file_matches(const char *path, const char *data, int len) {
+    SceUID fd = sceIoOpen(path, SCE_O_RDONLY, 0);
+    if (fd < 0) return 0;
+    char *b = malloc(len + 1);
+    int ok = 0;
+    if (b) {
+        int rd = sceIoRead(fd, b, len + 1);
+        ok = (rd == len) && memcmp(b, data, len) == 0;
+        free(b);
+    }
+    sceIoClose(fd);
+    return ok;
+}
+
+/* Copy src -> dst atomically (write to .tmp, verify, then swap) */
 static int pf_copy_file(const char *src, const char *dst) {
     SceUID fdin = sceIoOpen(src, SCE_O_RDONLY, 0);
     if (fdin < 0) return -1;
@@ -181,10 +212,11 @@ static int pf_copy_file(const char *src, const char *dst) {
     if (fdout < 0) { free(buf); return -5; }
     int wr = sceIoWrite(fdout, buf, sz);
     sceIoClose(fdout);
+    if (wr != sz || !pf_file_matches(tmp, buf, sz)) {
+        free(buf); sceIoRemove(tmp); return -6;
+    }
     free(buf);
-    if (wr != sz) { sceIoRemove(tmp); return -6; }
-    sceIoRemove(dst);
-    return sceIoRename(tmp, dst);
+    return pf_replace(tmp, dst);
 }
 
 static void pf_backup_config(void) {
@@ -254,22 +286,42 @@ static void pf_reset_config(void) {
         }
     }
 
-    /* Minimal config — just what HENkaku needs to boot */
-    static const char MINIMAL[] =
+    /* Minimal config - just what HENkaku needs to boot.
+     * v1.1.7: enabled lines for storagemgr / gamesd (SD2Vita: without them
+     * ux0: and this app vanish) and the boot recovery plugins are kept. */
+    char kern[768] = "", mainl[384] = "";
+    plugins_load();
+    for (int i = 0; i < plugins_get_count(); i++) {
+        if (!plugins_is_enabled(i)) continue;
+        const char *nm = plugins_get_name(i), *sec = plugins_get_section(i);
+        int k = strcasecmp(nm, "storagemgr.skprx") == 0 || strcasecmp(nm, "gamesd.skprx") == 0 ||
+                strcasecmp(nm, "boot_recovery.skprx") == 0;
+        int m = strcasecmp(nm, "boot_trigger.suprx") == 0;
+        char *dst = (k && strcmp(sec, "KERNEL") == 0) ? kern
+                  : (m && strcmp(sec, "main") == 0)   ? mainl : NULL;
+        int cap = (dst == kern) ? (int)sizeof(kern) : (int)sizeof(mainl);
+        if (dst && (int)(strlen(dst) + strlen(plugins_get_path(i)) + 2) < cap) {
+            strcat(dst, plugins_get_path(i)); strcat(dst, "\n");
+        }
+    }
+    static char MINIMAL[2048];
+    snprintf(MINIMAL, sizeof(MINIMAL),
         "# PSVita taiHEN config - reset by PS Vita Recovery Menu\n"
         "# henkaku.skprx is always loaded by taiHEN and not listed here\n"
         "# Kernel plugins require reboot to take effect\n"
         "\n"
         "*KERNEL\n"
+        "%s"
         "\n"
         "*main\n"
         "ur0:tai/henkaku.suprx\n"
+        "%s"
         "\n"
         "*NPXS10015\n"
         "ur0:tai/henkaku.suprx\n"
         "\n"
         "*NPXS10016\n"
-        "ur0:tai/henkaku.suprx\n";
+        "ur0:tai/henkaku.suprx\n", kern, mainl);
 
     /* Write atomically: tmp file then rename */
     char tmp[256];
@@ -282,13 +334,12 @@ static void pf_reset_config(void) {
     }
     int wr = sceIoWrite(fd, MINIMAL, len);
     sceIoClose(fd);
-    if (wr != len) {
+    if (wr != len || !pf_file_matches(tmp, MINIMAL, len)) {
         sceIoRemove(tmp);
         pf_message("Write error -- file unchanged.", "", COLOR_RED);
         return;
     }
-    sceIoRemove(config_path);
-    int mv = sceIoRename(tmp, config_path);
+    int mv = pf_replace(tmp, config_path);
     if (mv < 0) {
         pf_message("Rename failed -- check *.tmp file.", "", COLOR_RED);
         return;

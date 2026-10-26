@@ -5,7 +5,13 @@
  *   1. Safe Mode Boot      — Comment out ALL plugins so the system can boot clean
  *   2. Reset taiHEN config — Overwrite config.txt with a known-good minimal config
  *   3. Backup / Restore    — Copy ux0:tai/ to/from ux0:data/vita_recovery/tai_backup/
- *   4. Rebuild LiveArea DB — Delete the corrupt app.db so firmware regenerates it
+ *   4. Rebuild LiveArea DB — handled by the Sony Recovery flow (boot plugin)
+ *
+ * v1.1.7 (code review finding 4): every config write goes through
+ * write_file(): temp file -> read-back check -> swap with the old file kept
+ * as .old until the swap succeeds. Safe Mode and Reset back up each config
+ * first, keep the plugins needed to reach ux0: and this menu, and keep
+ * blank lines / comments.
  *
  * Storage root: ux0:data/vita_recovery/
  */
@@ -17,6 +23,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <strings.h>
 #include "restore.h"
 #include "compat.h"
 
@@ -36,8 +43,6 @@
 /* Legacy single-path macro kept for internal helpers */
 #define TAI_SOURCE_DIR   "ux0:tai"
 #define TAI_CONFIG       TAI_CONFIG_UR0
-#define APP_DB_PATH      "ur0:shell/db/app.db"
-#define APP_DB_BACKUP    "ux0:data/vita_recovery/app.db.bak"
 #define LOG_PATH         "ux0:data/vita_recovery/restore.log"
 
 /* ── Small file-existence helper ──────────────────────────────────────────── */
@@ -78,27 +83,95 @@ static int read_file(const char *path, char **out, int *out_len) {
     /* Use sceIoLseek for size — sceIoGetstatByFd is broken on some FW */
     int size = (int)sceIoLseek(fd, 0, SCE_SEEK_END);
     sceIoLseek(fd, 0, SCE_SEEK_SET);
-    if (size <= 0 || size > 512 * 1024) { sceIoClose(fd); return -2; }
+    if (size < 0 || size > 512 * 1024) { sceIoClose(fd); return -2; }
     *out = malloc(size + 1);
     if (!*out) { sceIoClose(fd); return -2; }
-    sceIoRead(fd, *out, size);
+    int rd = 0;
+    while (rd < size) {
+        int r = sceIoRead(fd, *out + rd, size - rd);
+        if (r <= 0) break;
+        rd += r;
+    }
     sceIoClose(fd);
+    if (rd != size) { free(*out); *out = NULL; return -3; }
     (*out)[size] = '\0';
     if (out_len) *out_len = size;
     return 0;
 }
 
-static int write_file(const char *path, const char *data, int len) {
+static int write_raw(const char *path, const char *data, int len) {
     SceUID fd = sceIoOpen(path,
                           SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
     if (fd < 0) return -1;
-    sceIoWrite(fd, data, len);
+    int done = 0;
+    while (done < len) {
+        int w = sceIoWrite(fd, data + done, len - done);
+        if (w <= 0) { sceIoClose(fd); return -1; }
+        done += w;
+    }
     sceIoClose(fd);
     return 0;
 }
 
+/* 1 if the file at path holds exactly data */
+static int file_matches(const char *path, const char *data, int len) {
+    char *back = NULL; int bl = 0;
+    if (read_file(path, &back, &bl) < 0) return 0;
+    int same = (bl == len) && memcmp(back, data, len) == 0;
+    free(back);
+    return same;
+}
+
+/* Safe write: tmp -> verify -> swap (old kept as .old until the swap is done).
+ * At every moment either the old or the new file exists. */
+static int write_file(const char *path, const char *data, int len) {
+    char tmp[300], old[300];
+    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
+    snprintf(old, sizeof(old), "%s.old", path);
+    if (write_raw(tmp, data, len) < 0 || !file_matches(tmp, data, len)) {
+        sceIoRemove(tmp);
+        return -1;                       /* original untouched */
+    }
+    if (!file_exists(path))
+        return sceIoRename(tmp, path) < 0 ? -2 : 0;
+    sceIoRemove(old);
+    if (sceIoRename(path, old) < 0) { sceIoRemove(tmp); return -3; }
+    if (sceIoRename(tmp, path) < 0) {
+        sceIoRename(old, path);          /* roll back */
+        sceIoRemove(tmp);
+        return -4;
+    }
+    sceIoRemove(old);
+    return file_matches(path, data, len) ? 0 : -5;
+}
+
+/* Plugins that must stay enabled in Safe Mode / Reset, or the console loses
+ * HENkaku features, ux0: (SD2Vita) or the way back into this menu. */
+static int keep_plugin(const char *line) {
+    static const char *KEEP[] = {
+        "henkaku.skprx", "henkaku.suprx", "storagemgr.skprx", "gamesd.skprx",
+        "boot_recovery.skprx", "boot_trigger.suprx",
+    };
+    const char *name = strrchr(line, '/');
+    name = name ? name + 1 : line;
+    for (unsigned i = 0; i < sizeof(KEEP) / sizeof(KEEP[0]); i++)
+        if (strncasecmp(name, KEEP[i], strlen(KEEP[i])) == 0) return 1;
+    return 0;
+}
+
+/* Backup name for a config path, e.g. ur0:tai/config.txt ->
+ * tai_backup/ur0_config_<tag>.txt */
+static void backup_name(const char *config_path, const char *tag,
+                        char *out, int outlen) {
+    char dev[8] = "x";
+    int i = 0;
+    while (config_path[i] && config_path[i] != ':' && i < 7) { dev[i] = config_path[i]; i++; }
+    dev[i] = '\0';
+    snprintf(out, outlen, TAI_BACKUP_DIR "/%s_config_%s.txt", dev, tag);
+}
+
 static int copy_file(const char *src, const char *dst) {
-    char *buf = NULL; int len = 0;
+    char *buf = NULL; int len = 0;   /* uses the safe write_file() */
     if (read_file(src, &buf, &len) < 0) return -1;
     int ret = write_file(dst, buf, len);
     free(buf);
@@ -194,32 +267,53 @@ void restore_ensure_dirs(void) {
 static RestoreStatus safe_mode_one_config(const char *config_path) {
     char *buf = NULL; int len = 0;
     if (read_file(config_path, &buf, &len) < 0) return RESTORE_ERR_IO;
+
+    /* Back up first; no backup = no change */
+    char bak[160];
+    backup_name(config_path, "before_safemode", bak, sizeof(bak));
+    restore_ensure_dirs();
+    if (write_file(bak, buf, len) < 0) {
+        free(buf);
+        log_write("Safe Mode: backup failed, config left unchanged");
+        return RESTORE_ERR_IO;
+    }
+
     char *out = malloc(len * 2 + 256);
     if (!out) { free(buf); return RESTORE_ERR_IO; }
     int out_pos = 0, disabled = 0;
-    char *line = strtok(buf, "\n");
-    while (line) {
-        int ll = strlen(line);
-        if (ll > 0 && line[ll-1] == '\r') line[--ll] = '\0';
-        /* A plugin line: not a comment, not a section header, has partition
-         * prefix, is a .skprx or .suprx. Never disable henkaku.skprx note. */
-        int is_plugin = (line[0] != '*' && line[0] != '#' && ll > 0
-                         && strstr(line, "0:") != NULL
-                         && (strstr(line, ".skprx") || strstr(line, ".suprx"))
-                         && !strstr(line, "henkaku.skprx"));
+
+    /* Walk lines by hand so blank lines and \r\n endings are kept */
+    char *p = buf, *end = buf + len;
+    while (p < end) {
+        char *nl = memchr(p, '\n', end - p);
+        int ll = nl ? (int)(nl - p) : (int)(end - p);
+        int cr = (ll > 0 && p[ll - 1] == '\r');
+        int tl = cr ? ll - 1 : ll;
+
+        char *t = p; int tlen = tl;
+        while (tlen > 0 && (*t == ' ' || *t == '\t')) { t++; tlen--; }
+        char tmp[300];
+        int cl = tlen < (int)sizeof(tmp) - 1 ? tlen : (int)sizeof(tmp) - 1;
+        memcpy(tmp, t, cl); tmp[cl] = '\0';
+
+        int is_plugin = (cl > 0 && tmp[0] != '*' && tmp[0] != '#'
+                         && strstr(tmp, "0:") != NULL
+                         && (strstr(tmp, ".skprx") || strstr(tmp, ".suprx"))
+                         && !keep_plugin(tmp));
         if (is_plugin) { out[out_pos++] = '#'; disabled++; }
-        memcpy(out + out_pos, line, ll); out_pos += ll;
-        out[out_pos++] = '\n';
-        line = strtok(NULL, "\n");
+        memcpy(out + out_pos, p, ll); out_pos += ll;
+        if (nl) out[out_pos++] = '\n';
+        p = nl ? nl + 1 : end;
     }
-    out[out_pos] = '\0';
     free(buf);
-    int r = write_file(config_path, out, out_pos);
+
+    int r = (disabled > 0) ? write_file(config_path, out, out_pos) : 0;
     free(out);
     if (r < 0) return RESTORE_ERR_IO;
     char msg[192];
     snprintf(msg, sizeof(msg),
-             "Safe Mode: %d plugin(s) disabled in %s", disabled, config_path);
+             "Safe Mode: %d plugin(s) disabled in %s (backup: %s)",
+             disabled, config_path, bak);
     log_write(msg);
     return RESTORE_OK;
 }
@@ -266,6 +360,54 @@ RestoreStatus restore_safe_mode(void) {
  * We create it, because once the user re-runs h-encore and taiHEN
  * loads, ur0:tai/config.txt must already be present.
  */
+/* Build the safe config, carrying over the essential plugin lines that were
+ * enabled in the old config (storagemgr/gamesd for SD2Vita, the boot
+ * recovery plugins). Returns malloc'd text; caller frees. */
+static char *build_safe_config(const char *old_cfg, int old_len, int *out_len) {
+    char kern[1024] = "", mainl[512] = "";
+    if (old_cfg) {
+        char section[64] = "";
+        const char *p = old_cfg, *end = old_cfg + old_len;
+        while (p < end) {
+            const char *nl = memchr(p, '\n', end - p);
+            int ll = nl ? (int)(nl - p) : (int)(end - p);
+            char line[300];
+            int cl = ll < (int)sizeof(line) - 1 ? ll : (int)sizeof(line) - 1;
+            memcpy(line, p, cl); line[cl] = '\0';
+            while (cl > 0 && (line[cl-1] == '\r' || line[cl-1] == ' ')) line[--cl] = '\0';
+            char *t = line; while (*t == ' ' || *t == '\t') t++;
+            if (*t == '*') snprintf(section, sizeof(section), "%s", t + 1);
+            else if (*t && *t != '#' && keep_plugin(t) &&
+                     strcasecmp(strrchr(t, '/') ? strrchr(t, '/') + 1 : t, "henkaku.suprx") != 0 &&
+                     strcasecmp(strrchr(t, '/') ? strrchr(t, '/') + 1 : t, "henkaku.skprx") != 0) {
+                char *dst = (strcmp(section, "KERNEL") == 0) ? kern
+                          : (strcmp(section, "main") == 0)   ? mainl : NULL;
+                int cap = (dst == kern) ? (int)sizeof(kern) : (int)sizeof(mainl);
+                if (dst && (int)(strlen(dst) + strlen(t) + 2) < cap) {
+                    strcat(dst, t); strcat(dst, "\n");
+                }
+            }
+            p = nl ? nl + 1 : end;
+        }
+    }
+    /* Split SAFE_TAI_CONFIG at the two insertion points */
+    const char *k_at = strstr(SAFE_TAI_CONFIG, "# ur0:tai/storagemgr.skprx\n");
+    const char *m_at = strstr(SAFE_TAI_CONFIG, "# Add LiveArea user plugins (.suprx) here:\n");
+    int total = (int)sizeof(SAFE_TAI_CONFIG) + (int)strlen(kern) + (int)strlen(mainl) + 8;
+    char *out = malloc(total);
+    if (!out) return NULL;
+    int a_len = (int)(k_at - SAFE_TAI_CONFIG) + (int)strlen("# ur0:tai/storagemgr.skprx\n");
+    int b_len = (int)(m_at - (SAFE_TAI_CONFIG + a_len));
+    int pos = 0;
+    memcpy(out + pos, SAFE_TAI_CONFIG, a_len); pos += a_len;
+    memcpy(out + pos, kern, strlen(kern)); pos += strlen(kern);
+    memcpy(out + pos, SAFE_TAI_CONFIG + a_len, b_len); pos += b_len;
+    memcpy(out + pos, mainl, strlen(mainl)); pos += strlen(mainl);
+    strcpy(out + pos, m_at); pos += strlen(m_at);
+    *out_len = pos;
+    return out;
+}
+
 RestoreStatus restore_reset_tai_config(void) {
     log_open();
     restore_ensure_dirs();
@@ -279,25 +421,45 @@ RestoreStatus restore_reset_tai_config(void) {
         active = TAI_CONFIG_UX0;
 
     set_status(RESTORE_RUNNING, "Backing up current config...");
-    copy_file(active, TAI_BACKUP_DIR "/config.txt.bak");
+    char *old = NULL; int old_len = 0;
+    int have_old = (read_file(active, &old, &old_len) == 0);
+    if (have_old) {
+        char bak[160];
+        backup_name(active, "before_reset", bak, sizeof(bak));
+        if (write_file(bak, old, old_len) < 0 ||
+            write_file(TAI_BACKUP_DIR "/config.txt.bak", old, old_len) < 0) {
+            free(old);
+            set_status(RESTORE_ERR_IO, "ERROR: Backup failed. Config NOT changed.");
+            log_close(); return g_last_status;
+        }
+    }
+
+    int new_len = 0;
+    char *safe = build_safe_config(have_old ? old : NULL, old_len, &new_len);
+    free(old);
+    if (!safe) {
+        set_status(RESTORE_ERR_IO, "ERROR: Out of memory. Config NOT changed.");
+        log_close(); return g_last_status;
+    }
 
     set_status(RESTORE_RUNNING, "Writing safe default config to active path...");
     /* Always ensure ur0:tai/ directory exists (needed on 3.67/3.68) */
     sceIoMkdir("ur0:tai", 0777);
-    /* Write safe config to the active location */
-    if (write_file(active, SAFE_TAI_CONFIG, sizeof(SAFE_TAI_CONFIG) - 1) < 0) {
-        set_status(RESTORE_ERR_IO, "ERROR: Cannot write config.txt");
+    if (write_file(active, safe, new_len) < 0) {
+        free(safe);
+        set_status(RESTORE_ERR_IO, "ERROR: Cannot write config.txt (unchanged)");
         log_close(); return g_last_status;
     }
     /* Also ensure ur0:tai/config.txt exists as a fallback (important on
-     * h-encore systems where ur0: may be the only persistent location) */
-    if (active != TAI_CONFIG_UR0) {
-        write_file(TAI_CONFIG_UR0, SAFE_TAI_CONFIG, sizeof(SAFE_TAI_CONFIG) - 1);
-    }
+     * h-encore systems). v1.1.7: back it up first and only create it if
+     * missing - an existing ur0 config is not overwritten silently. */
+    if (strcmp(active, TAI_CONFIG_UR0) != 0 && !file_exists(TAI_CONFIG_UR0))
+        write_file(TAI_CONFIG_UR0, safe, new_len);
+    free(safe);
+
     char msg[192];
     snprintf(msg, sizeof(msg),
-             "Config reset OK. Wrote to %s. Backup -> tai_backup/config.txt.bak",
-             active);
+             "Config reset OK (%s). Backup in tai_backup/.", active);
     set_status(RESTORE_OK, msg);
     log_close(); return RESTORE_OK;
 }
@@ -395,28 +557,14 @@ RestoreStatus restore_restore_tai(void) {
 }
 
 /* ── FUNCTION 4: Rebuild LiveArea database ───────────────────────────────── */
+/* v1.1.7 (review finding 6): this app cannot see ur0:shell, so the old
+ * direct delete never worked (and "not found" was reported as success).
+ * The Restore screen now runs the same flow as Sony Recovery > Rebuild
+ * Database (boot plugin). This stub only remains for API compatibility. */
 RestoreStatus restore_rebuild_livearea(void) {
-    log_open();
-    restore_ensure_dirs();
-    set_status(RESTORE_RUNNING, "Checking for app.db...");
-
-    SceIoStat st;
-    if (sceIoGetstat(APP_DB_PATH, &st) >= 0) {
-        set_status(RESTORE_RUNNING, "Backing up app.db...");
-        copy_file(APP_DB_PATH, APP_DB_BACKUP);
-
-        if (sceIoRemove(APP_DB_PATH) < 0) {
-            set_status(RESTORE_ERR_IO,
-                       "ERROR: Cannot remove app.db (needs kernel plugin)");
-            log_close(); return g_last_status;
-        }
-        set_status(RESTORE_OK,
-                   "app.db removed. Reboot - firmware will rebuild it.");
-    } else {
-        set_status(RESTORE_OK,
-                   "app.db not found (already gone). Reboot to regenerate.");
-    }
-    log_close(); return RESTORE_OK;
+    set_status(RESTORE_ERR_KERNEL,
+               "Use Sony Recovery > Rebuild Database (boot plugin).");
+    return g_last_status;
 }
 
 /* ── Utility ──────────────────────────────────────────────────────────────── */

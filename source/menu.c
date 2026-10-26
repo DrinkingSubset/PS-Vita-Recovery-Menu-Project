@@ -409,7 +409,10 @@ static void build_advanced_menu_impl(Menu *main) {
     g_advanced_items[n++] = (MenuItem){ "",                ITEM_SEPARATOR, 0, NULL,              NULL             };
     g_advanced_items[n++] = (MenuItem){ "Boot Diagnostics",  ITEM_ACTION,  0, action_show_diag,         NULL      };
     g_advanced_items[n++] = (MenuItem){ "Boot Recovery",     ITEM_ACTION,  0, action_show_ri,           NULL      };
-    g_advanced_items[n++] = (MenuItem){ "System Write Mode", ITEM_TOGGLE,  0, action_toggle_dev_unlock, NULL      };
+    /* v1.1.7 (code review finding 7): "System Write Mode" hidden. The toggle
+     * only set a flag nothing used - File Manager keeps os0:/vs0: read-only
+     * regardless - so it promised something it did not do. */
+    (void)action_toggle_dev_unlock;
     g_advanced_items[n++] = (MenuItem){ "< Back",          ITEM_BACK,      0, NULL,              NULL             };
 
     g_advanced_menu.title    = "Advanced";

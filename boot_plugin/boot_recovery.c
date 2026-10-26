@@ -8,6 +8,7 @@
  * ur0:tai/rebuild_db_trigger. At the next boot, before the home screen
  * starts, this plugin deletes ur0:shell/db/app.db so the system rebuilds
  * it, and writes the result to ur0:tai/rebuild_db_result.txt.
+ * v1.1.7: app.db is renamed to app.db.bak (kept) instead of deleted.
  */
 
 #include <psp2kern/kernel/modulemgr.h>
@@ -22,6 +23,7 @@
 #define FLAG_REBUILD   "ur0:tai/rebuild_db_trigger"
 #define REBUILD_RESULT "ur0:tai/rebuild_db_result.txt"
 #define APP_DB         "ur0:shell/db/app.db"
+#define APP_DB_BAK     "ur0:shell/db/app.db.bak"   /* v1.1.7: kept, not deleted */
 
 /* Only touch app.db this early after power-on. With Enso, kernel plugins
  * load within a few seconds of boot, before the home screen opens the
@@ -58,8 +60,17 @@ static void handle_rebuild_db(void) {
         /* t >> 20 is roughly seconds; avoids 64-bit division (no libgcc) */
         pos = put_hex(out, pos, "skipped=", (unsigned int)(t >> 20));
     } else {
-        int r = ksceIoRemove(APP_DB);
-        pos = put_hex(out, pos, "appdb=", (unsigned int)r);
+        /* v1.1.7: RENAME instead of delete, so the old database is kept
+         * as app.db.bak (same partition, no extra space, instant). The
+         * system still sees no app.db and rebuilds it. One previous
+         * backup is kept; an older one is replaced. */
+        ksceIoRemove(APP_DB_BAK);
+        int r = ksceIoRename(APP_DB, APP_DB_BAK);
+        int bak = (r >= 0);
+        if (r < 0)
+            r = ksceIoRemove(APP_DB);   /* rename refused: plain delete */
+        pos = put_hex(out, pos, "appdb=", (unsigned int)(r < 0 ? r : 0));
+        pos = put_hex(out, pos, "bak=", (unsigned int)bak);
         /* Leftover SQLite side files; missing files are fine */
         ksceIoRemove(APP_DB "-journal");
         ksceIoRemove(APP_DB "-wal");
@@ -79,6 +90,12 @@ static int recovery_thread(SceSize args, void *argp) {
 
     /* Do the database job first, before the home screen opens app.db */
     handle_rebuild_db();
+
+    /* v1.1.7: clear flags left over from an earlier boot (for example the
+     * app never started), so only a button held THIS boot triggers recovery.
+     * The user plugin in SceShell reads these flags later in boot. */
+    ksceIoRemove(FLAG_RECOVERY);
+    ksceIoRemove(FLAG_SAFEMODE);
 
     /* Poll up to 5 seconds for ctrl to be ready */
     for (i = 0; i < 500; i++) {

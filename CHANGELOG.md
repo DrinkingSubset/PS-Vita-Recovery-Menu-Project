@@ -3,6 +3,27 @@
 By DrinkingSubset. Newest version first. Copy a version's block straight into
 the GitHub release notes.
 
+## v1.1.7
+Safety release based on an outside code review of v1.1.6.
+
+> **After installing, open Advanced > Boot Recovery > Install / Update Boot Recovery, then reboot.** Both boot plugins changed.
+
+- **Boot entry (hold R) is more reliable and can't get stuck.** `boot_trigger.suprx` now launches the menu when the kernel plugin saw R/L held during early boot, not only if R is still held when the home screen loads. Every wait now has a time limit: 60 s for LiveArea, 15 s of launch retries. Before, both loops ran forever, a likely cause of the "custom boot splash + R" boot loop.
+- **Boot loop breaker:** after two boots where recovery was requested but the app never started, the plugin stops auto-launching and the Vita boots normally. Flags left over from an earlier boot are cleared at the start of each boot.
+- **Boot Recovery installer can update in place.** "Install Boot Recovery" is now "Install / Update Boot Recovery". When the plugins are already installed, it copies this version's plugin files over the old ones (config untouched) instead of saying "uninstall first". The status line shows "UPDATE AVAILABLE" when the installed plugins differ from the app's.
+- **Rebuild Database keeps the old database:** the boot plugin renames `app.db` to `app.db.bak` instead of deleting it.
+- **Restore / Unbrick is safer:**
+  - Safe Mode Boot and Reset taiHEN Config back up each config first (to `ux0:data/vita_recovery/tai_backup/`) and refuse to change anything if the backup fails.
+  - Both now **keep HENkaku, storagemgr / gamesd (SD2Vita) and the boot recovery plugins enabled**. Before, they disabled or dropped them, so on SD2Vita ux0: (and this app) could disappear.
+  - Safe Mode keeps blank lines and line endings. Reset no longer silently overwrites an existing `ur0:tai/config.txt` fallback.
+  - "Rebuild LiveArea Database" now runs the same boot plugin flow as Sony Recovery. The old direct delete never worked and reported "already gone" as success.
+- **Safe config writes everywhere:** Restore / Unbrick, Plugin Fix (backup/restore/reset) and the Recovery Installer now write to a temp file, read it back, and swap it in with the old file kept as `.old` until the swap succeeds. A power cut can no longer leave the config missing.
+- Plugin Fix "Reset to Minimal" keeps storagemgr / gamesd / boot recovery plugin lines.
+- **Sony Recovery > Restore PS Vita System is now an honest guide.** It explains how to factory reset with Sony's Safe Mode (R + PS + Power) instead of running a fake "restore". The old code only started and stopped a system module and rebooted. The Safe Mode hint in the footer now says R+PS+Power.
+- **"System Write Mode" removed from Advanced:** the toggle did nothing (File Manager always keeps os0:/vs0: read-only).
+- Repo cleanup: removed old unused copies `source/boot_recovery.c`, `source/boot_trigger_user.c`, `source/CMakeLists.txt`, and the stale prebuilt `boot_recovery.skprx` / `boot_trigger.suprx` in the project root (the VPK always uses freshly built plugins). `.gitignore` covers build folders.
+- README rewritten for the current version: features, install/update steps, the real boot flow, safety features, known issues.
+
 ## v1.1.6
 - **Rebuild Database now works**, through the boot plugin. The app is a safe homebrew and can't see `ur0:shell`, so it now writes a request file (`ur0:tai/rebuild_db_trigger`). At the next boot, before the home screen starts, `boot_recovery.skprx` deletes `ur0:shell/db/app.db` and the system rebuilds it. The result appears as a notice on the main menu.
   - Requires the **updated boot plugin**: reinstall it from Recovery Installer after updating. The screen tells you if the plugin is missing or older.
@@ -26,7 +47,7 @@ the GitHub release notes.
 - "Remove Duplicates" and "Clean Config" only treat lines as duplicates inside the **same section**. Clean Config refuses to run, rather than drop lines, if the config is unusually large.
 - Plugin Fix Mode: "Reset Config" now saves the old config as `config.txt.before_reset` first. Protected plugins (henkaku, storagemgr, gamesd) show their real ON/OFF state.
 - **CPU Speed:** removed ARM 500 MHz (the system rejects it with error 0x802B0000 and stays at 444) and BUS 166 MHz (the system keeps 222). Old saved settings are converted automatically. The clock file now stores MHz values.
-- **Sony Recovery > Rebuild Database:** shows the real error code and its meaning if app.db can't be deleted, and backs up app.db to `ux0:data/VitaRecovery/app.db.bak` first. It also removes leftover journal files and checks that the delete really happened. Sony's own Safe Mode is suggested if it's blocked.
+- **Sony Recovery > Rebuild Database:** shows the real error code and its meaning if app.db can't be deleted. (Superseded in v1.1.6, where the boot plugin does the rebuild.)
 
 ## v1.1.3
 - Fix: the update check failed at once with "DNS lookup failed (0x80410116)" because the DNS timeout was passed in the wrong unit. It is now 5 seconds.

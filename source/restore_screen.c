@@ -25,6 +25,7 @@
  */
 
 #include <psp2/ctrl.h>
+#include "official_recovery.h"
 #include <psp2/power.h>
 #include <string.h>
 #include <stdio.h>
@@ -51,10 +52,10 @@ typedef struct {
 
 static const RestoreOption OPTIONS[] = {
     { "1. Safe Mode Boot",
-      "Disables ALL plugins so Vita can boot cleanly.",
+      "Disables plugins (keeps HENkaku/SD2Vita). Backed up.",
       restore_safe_mode },
     { "2. Reset taiHEN Config",
-      "Writes safe defaults to config.txt. Old saved as .bak",
+      "Writes safe defaults. Old config backed up first.",
       restore_reset_tai_config },
     { "3. Backup  ux0:tai/",
       "Copies tai/ folder to vita_recovery/tai_backup/",
@@ -63,7 +64,7 @@ static const RestoreOption OPTIONS[] = {
       "Restores tai/ from tai_backup/. Backup required first.",
       restore_restore_tai },
     { "5. Rebuild LiveArea Database",
-      "Deletes app.db so firmware rebuilds it on next reboot.",
+      "Same as Sony Recovery: rebuilt at next boot.",
       restore_rebuild_livearea },
 };
 static const int OPTION_COUNT = sizeof(OPTIONS) / sizeof(OPTIONS[0]);
@@ -212,7 +213,12 @@ void restore_screen_run(void *font) {
         if ((ctrl.buttons & SCE_CTRL_UP) && !(old.buttons & SCE_CTRL_UP))
             selected = (selected - 1 + OPTION_COUNT) % OPTION_COUNT;
 
-        if ((ctrl.buttons & SCE_CTRL_CROSS) && !(old.buttons & SCE_CTRL_CROSS)) {
+        if ((ctrl.buttons & SCE_CTRL_CROSS) && !(old.buttons & SCE_CTRL_CROSS)
+            && OPTIONS[selected].fn == restore_rebuild_livearea) {
+            /* v1.1.7: same warnings + boot plugin flow as Sony Recovery */
+            official_recovery_rebuild_database(font);
+            do { sceCtrlPeekBufferPositive(0, &old, 1); } while (old.buttons);
+        } else if ((ctrl.buttons & SCE_CTRL_CROSS) && !(old.buttons & SCE_CTRL_CROSS)) {
             if (confirm_dialog(font, OPTIONS[selected].label)) {
                 RestoreStatus st = OPTIONS[selected].fn();
                 backup_exists = restore_backup_exists();

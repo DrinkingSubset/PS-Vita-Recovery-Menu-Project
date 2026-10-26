@@ -18,7 +18,8 @@
  *
  * Safety rules:
  *   - Config is always backed up before modification
- *   - Atomic write (tmp → rename) for config changes
+ *   - Atomic write (tmp -> verify -> rename, old kept as .old) for config
+ *   - v1.1.7: Install becomes Install / Update when already installed
  *   - Plugin lines are verified to exist before uninstalling
  *   - Never touches vs0:, os0:, or any system partition
  */
@@ -123,6 +124,43 @@ static int ri_confirm(const char *prompt, const char *detail) {
     }
 }
 
+/* ── Replace dst with tmp without a window where dst is missing ──────────
+ * v1.1.7 (review finding 13): the old code did remove(dst) then
+ * rename(tmp, dst); a power cut between the two left no config at all.
+ * Now dst is first renamed to dst.old, so at every moment either dst or
+ * dst.old exists, and a failed step is rolled back. */
+static int ri_replace(const char *tmp, const char *dst) {
+    if (sceIoRename(tmp, dst) >= 0) return 0;          /* dst did not exist */
+    char old[140];
+    snprintf(old, sizeof(old), "%s.old", dst);
+    sceIoRemove(old);
+    int r = sceIoRename(dst, old);
+    if (r < 0) { sceIoRemove(tmp); return r; }          /* dst untouched */
+    r = sceIoRename(tmp, dst);
+    if (r < 0) { sceIoRename(old, dst); sceIoRemove(tmp); return r; }  /* roll back */
+    sceIoRemove(old);
+    return 0;
+}
+
+/* 1 if both files exist and have identical contents */
+static int ri_files_equal(const char *a, const char *b) {
+    SceUID fa = sceIoOpen(a, SCE_O_RDONLY, 0);
+    if (fa < 0) return 0;
+    SceUID fb = sceIoOpen(b, SCE_O_RDONLY, 0);
+    if (fb < 0) { sceIoClose(fa); return 0; }
+    static char ba[4096], bb[4096];
+    int same = 1;
+    while (1) {
+        int ra = sceIoRead(fa, ba, sizeof(ba));
+        int rb = sceIoRead(fb, bb, sizeof(bb));
+        if (ra != rb || ra < 0) { same = 0; break; }
+        if (ra == 0) break;
+        if (memcmp(ba, bb, ra) != 0) { same = 0; break; }
+    }
+    sceIoClose(fa); sceIoClose(fb);
+    return same;
+}
+
 /* ── File copy (chunked, no malloc > 32KB) ───────────────────────────────── */
 static int ri_copy_file(const char *src, const char *dst) {
     SceUID fdin = sceIoOpen(src, SCE_O_RDONLY, 0);
@@ -142,9 +180,9 @@ static int ri_copy_file(const char *src, const char *dst) {
     sceIoClose(fdin);
     sceIoClose(fdout);
     if (result < 0 || n < 0) { sceIoRemove(tmp); return -4; }
+    if (!ri_files_equal(src, tmp)) { sceIoRemove(tmp); return -5; }  /* verify */
 
-    sceIoRemove(dst);
-    return sceIoRename(tmp, dst);
+    return ri_replace(tmp, dst);
 }
 
 /* ── Atomic config write ─────────────────────────────────────────────────── */
@@ -156,8 +194,21 @@ static int ri_write_config(const char *path, const char *data, int len) {
     int wr = sceIoWrite(fd, data, len);
     sceIoClose(fd);
     if (wr != len) { sceIoRemove(tmp); return -2; }
-    sceIoRemove(path);
-    return sceIoRename(tmp, path);
+
+    /* Read back and compare before touching the real config */
+    fd = sceIoOpen(tmp, SCE_O_RDONLY, 0);
+    if (fd < 0) { sceIoRemove(tmp); return -3; }
+    char *chk = malloc(len + 1);
+    int ok = 0;
+    if (chk) {
+        int rd = sceIoRead(fd, chk, len + 1);
+        ok = (rd == len) && memcmp(chk, data, len) == 0;
+        free(chk);
+    }
+    sceIoClose(fd);
+    if (!ok) { sceIoRemove(tmp); return -4; }
+
+    return ri_replace(tmp, path);
 }
 
 /* ── Check if a plugin line is in config (uncommented) ───────────────────── */
@@ -300,13 +351,30 @@ static void ri_install(void) {
         return;
     }
 
-    /* Already installed? */
+    /* Already installed? v1.1.7 (review finding 3): offer an in-place
+     * update of the plugin files instead of "uninstall first". The config
+     * lines are already there, so the config is not touched. */
     int skprx_cfg = ri_plugin_in_config(cfg, skprx_line);
     int suprx_cfg = ri_plugin_in_config(cfg, suprx_line);
     if (skprx_cfg && suprx_cfg &&
         ri_path_exists(skprx_dst) && ri_path_exists(suprx_dst)) {
-        ri_message("Boot Recovery already installed.",
-                   "Uninstall first if you want to reinstall.", COLOR_YELLOW);
+        int current = ri_files_equal(RI_SKPRX_SRC, skprx_dst) &&
+                      ri_files_equal(RI_SUPRX_SRC, suprx_dst);
+        if (!ri_confirm(current ? "Already installed and up to date."
+                                : "Update Boot Recovery plugins?",
+                        current ? "Press X to reinstall the files anyway."
+                                : "Copies this version's plugins. Config unchanged."))
+            return;
+        if (ri_copy_file(RI_SKPRX_SRC, skprx_dst) < 0 ||
+            ri_copy_file(RI_SUPRX_SRC, suprx_dst) < 0) {
+            ri_message("Update failed: could not copy plugin files.",
+                       "Old plugins are still in place.", COLOR_RED);
+            return;
+        }
+        ri_message("Boot Recovery plugins updated.",
+                   "Reboot to load the new plugins.", COLOR_GREEN);
+        if (ri_confirm("Reboot now?", "The new plugins load at the next boot."))
+            scePowerRequestColdReset();
         return;
     }
 
@@ -515,22 +583,37 @@ static int ri_get_status(int *skprx_ok,     int *skprx_cfg_ok,
     return (*skprx_ok && *skprx_cfg_ok && *suprx_ok && *suprx_cfg_ok);
 }
 
+/* 1 if the installed plugin files differ from this app's copies */
+static int ri_status_dirty = 1;
+static int ri_outdated(void) {
+    const char *cfg = g_compat.active_tai_config;
+    char tai_dir[48], k[64], u[64];
+    snprintf(tai_dir, sizeof(tai_dir), "%s",
+             (cfg && cfg[0] != '(') ? cfg : "ux0:tai/config.txt");
+    char *sl = strrchr(tai_dir, '/');
+    if (sl) *sl = '\0'; else snprintf(tai_dir, sizeof(tai_dir), "ux0:tai");
+    snprintf(k, sizeof(k), "%s/boot_recovery.skprx", tai_dir);
+    snprintf(u, sizeof(u), "%s/boot_trigger.suprx",  tai_dir);
+    return !(ri_files_equal(RI_SKPRX_SRC, k) && ri_files_equal(RI_SUPRX_SRC, u));
+}
+
 /* ── Main screen ─────────────────────────────────────────────────────────── */
 
 #define RI_OPT_COUNT 3
 static const char *RI_LABELS[RI_OPT_COUNT] = {
-    "Install Boot Recovery",
+    "Install / Update Boot Recovery",
     "Uninstall Boot Recovery",
     "View Status",
 };
 static const char *RI_DESCS[RI_OPT_COUNT] = {
-    "Install kernel + user plugins, update tai config",
+    "Install plugins, or update them to this version",
     "Remove both plugin lines from tai config + delete files",
     "Show current installation status",
 };
 
 void recovery_installer_run(void) {
     int sel = 0;
+    ri_status_dirty = 1;   /* re-check plugin versions on every visit */
     SceCtrlData old, ctrl;
     memset(&old, 0, sizeof(old));
     ri_drain(&old);
@@ -543,6 +626,12 @@ void recovery_installer_run(void) {
         /* Partial: some but not all components present */
         int partial = !installed &&
                       (skprx_ok || skprx_cfg_ok || suprx_ok || suprx_cfg_ok);
+        /* Installed files differ from the ones in this app version? */
+        static int outdated = -1;
+        if (outdated < 0 || ri_status_dirty) {
+            outdated = installed ? ri_outdated() : 0;
+            ri_status_dirty = 0;
+        }
 
         display_start();
         display_clear(COLOR_BG);
@@ -561,10 +650,12 @@ void recovery_installer_run(void) {
                                    : RGBA8(30, 10, 10, 255);
         display_rect(0, bany, SCREEN_W, banh, ban_bg);
 
-        uint32_t st_col = installed ? COLOR_GREEN
+        uint32_t st_col = installed ? (outdated ? COLOR_YELLOW : COLOR_GREEN)
                         : partial   ? COLOR_YELLOW
                                     : COLOR_RED;
-        const char *st_str = installed ? "Status: FULLY INSTALLED"
+        const char *st_str = installed
+                           ? (outdated ? "Status: INSTALLED - UPDATE AVAILABLE"
+                                       : "Status: FULLY INSTALLED (up to date)")
                            : partial   ? "Status: PARTIAL (reinstall recommended)"
                                        : "Status: NOT INSTALLED";
         display_text(MENU_X, bany + 4,                st_col,    st_str);
@@ -620,8 +711,8 @@ void recovery_installer_run(void) {
 
         if (ri_btn(&ctrl, &old, SCE_CTRL_CROSS)) {
             switch (sel) {
-                case 0: ri_install();   break;
-                case 1: ri_uninstall(); break;
+                case 0: ri_install();   ri_status_dirty = 1; break;
+                case 1: ri_uninstall(); ri_status_dirty = 1; break;
                 case 2: {
                     /* Detailed status popup */
                     char l1[80], l2[80];

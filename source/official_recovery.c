@@ -296,16 +296,16 @@ static void do_rebuild_database(void *font) {
                  ? "Boot plugin (boot_recovery.skprx) not installed."
                  : "Boot plugin is an older version.");
         snprintf(g_msg2, sizeof(g_msg2),
-                 "Install it from Recovery Installer, reboot,");
+                 "Advanced > Boot Recovery > Install / Update, reboot,");
         snprintf(g_msg3, sizeof(g_msg3), "then come back here. Nothing changed.");
         result_screen(font, "Rebuild Database", 0, 0);
         return;
     }
 
     static const char *const W[] = {
-        "This deletes the system app database (app.db).",
+        "The system app database (app.db) is replaced.",
         "The Vita rebuilds it at the next boot.",
-        "",
+        "(The old one is kept as app.db.bak.)",
         "YOUR HOME SCREEN LAYOUT WILL BE RESET:",
         "- All FOLDERS are removed.",
         "- Bubbles go back to default order.",
@@ -395,43 +395,40 @@ cancelled:
     cancel_return();
 }
 
+/* v1.1.7 (code review finding 5): the old version showed three factory
+ * reset warnings and then only started/stopped ScePromoterUtil and
+ * rebooted - nothing was restored. A safe homebrew cannot start Sony's
+ * factory reset, so this is now an honest guide to Sony's own Safe Mode. */
 static void do_restore_system(void *font) {
-    if (!confirm_screen(font,
-            "Sony Recovery - Restore PS Vita System",
-            "ALL system data and accounts will be erased.",
-            "The system resets to factory state."))
-        goto cancelled;
-    if (!confirm_screen(font,
-            "Restore PS Vita System [2/3]",
-            "This removes HENkaku. CFW will be lost.",
-            "Back up your data before proceeding."))
-        goto cancelled;
-    if (!confirm_screen(font,
-            "Restore PS Vita System [FINAL]",
-            "FINAL WARNING - irrecoverable factory reset.",
-            "Press X to confirm. Press O to cancel."))
-        goto cancelled;
-
-    display_start(); display_clear(COLOR_BG);
-    draw_titlebar("Sony Recovery - Restore PS Vita System");
-    draw_text(MENU_X, TITLE_H + 8,          COLOR_YELLOW, "Restoring...");
-    draw_text(MENU_X, TITLE_H + 8 + LINE_H, COLOR_DIM,    "Do NOT power off.");
-    draw_footerbar("");
-    display_end();
-
-    int ret = sceSysmoduleLoadModule(0x0038);
-    if (ret >= 0) {
-        scePromoterUtilityInit();
-        scePromoterUtilityExit();
-        sceSysmoduleUnloadModule(0x0038);
+    (void)font;
+    static const char *const L[] = {
+        "This app cannot factory reset the Vita itself.",
+        "Use Sony's Safe Mode instead:",
+        "1. Power the Vita off completely.",
+        "2. Hold R + PS + Power until Safe Mode opens.",
+        "   (PS TV: hold the power button.)",
+        "3. Choose 'Restore the PS Vita System'.",
+        "It ERASES all data and settings and removes",
+        "HENkaku. If you use Enso, check a current guide",
+        "first. Back up ux0: and your saves before.",
+    };
+    SceCtrlData old, ctrl;
+    sceCtrlPeekBufferPositive(0, &old, 1);
+    while (1) {
+        display_start();
+        display_clear(COLOR_BG);
+        draw_titlebar("Sony Recovery - Restore PS Vita System");
+        int y = TITLE_H + 8;
+        for (int i = 0; i < 9; i++)
+            draw_text(MENU_X, y + LINE_H * i,
+                      i == 0 ? COLOR_YELLOW : (i >= 6 ? COLOR_RED : COLOR_TEXT), L[i]);
+        draw_text(MENU_X, y + LINE_H * 10, COLOR_DIM, "[O] Back");
+        draw_footerbar("[O] Back");
+        display_end();
+        sceCtrlPeekBufferPositive(0, &ctrl, 1);
+        if (btn_pressed(&ctrl, &old, SCE_CTRL_CIRCLE)) { cancel_return(); return; }
+        old = ctrl;
     }
-    scePowerRequestColdReset();
-    snprintf(g_msg, sizeof(g_msg), "Restore initiated. Rebooting...");
-    result_screen(font, "Restore PS Vita System", 1, 0);
-    return;
-
-cancelled:
-    cancel_return();
 }
 
 static void do_update_system(void *font) {
@@ -460,6 +457,8 @@ static void do_update_system(void *font) {
     }
 }
 
+void official_recovery_rebuild_database(void *font) { do_rebuild_database(font); }
+
 /* ══ Option table ══════════════════════════════════════════════════════════ */
 typedef struct {
     const char *label;       /* <= 30 chars — leaves room for [DANGER] tag  */
@@ -479,8 +478,8 @@ static const OfficialOption OPTIONS[] = {
       "Erases ALL of ux0:. ux0:tai/ preserved. IRREVERSIBLE.",
       do_format_memory_card, 1 },
     { "4. Restore PS Vita System",
-      "Factory reset. Removes all data, accounts, CFW.",
-      do_restore_system, 1 },
+      "How to factory reset with Sony Safe Mode (guide).",
+      do_restore_system, 0 },
     { "5. Update System Software",
       "Uses ux0:update/PSP2UPDAT.PUP. Removes HENkaku.",
       do_update_system, 1 },
@@ -527,7 +526,7 @@ void official_recovery_screen_run(void *font) {
             }
         }
 
-        draw_footerbar("[X] Execute  [O] Back  (Safe mode: L+R+PS+Power)");
+        draw_footerbar("[X] Execute  [O] Back  (Safe Mode: R+PS+Power)");
         display_end();
 
         sceCtrlPeekBufferPositive(0, &ctrl, 1);

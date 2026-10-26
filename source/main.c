@@ -41,6 +41,10 @@ int main(int argc, char *argv[]) {
      *   Auto-apply Safe Mode (disable non-essential plugins) before
      *   opening the menu, then show a banner confirming it.
      */
+    /* v1.1.7: the app started, so the boot plugin's launch worked.
+     * Clear its loop-breaker counter. */
+    sceIoRemove("ur0:tai/recovery_launch_pending");
+
     int booted_via_recovery = flag_exists(FLAG_RECOVERY);
     int booted_via_safemode = flag_exists(FLAG_SAFEMODE);
 
@@ -61,7 +65,9 @@ int main(int argc, char *argv[]) {
             if (sscanf(rb, "appdb=%x", &code) == 1) {
                 if (code == 0)
                     snprintf(g_boot_notice, sizeof(g_boot_notice),
-                             "Database rebuilt at boot. Layout was reset.");
+                             strstr(rb, "bak=00000001")
+                             ? "Database rebuilt. Old one kept as app.db.bak."
+                             : "Database rebuilt at boot. Layout was reset.");
                 else
                     snprintf(g_boot_notice, sizeof(g_boot_notice),
                              "Rebuild failed at boot: 0x%08X. Nothing changed.", code);

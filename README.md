@@ -60,7 +60,7 @@ By using this software, you acknowledge and accept that:
 ### Recommendations before use
 
 - Always back up `ux0:tai/config.txt` and `ur0:tai/config.txt` before making any changes.
-- Use the **Backup tai/** function under Restore / Unbrick before proceeding with any repair operation.
+- Use the **Backup tai/** function under Restore / Unbrick before proceeding with any repair operation. (Safe Mode Boot and Reset taiHEN Config also back up your config automatically.)
 - Test changes on one device before applying to others.
 - If unsure about an operation, do not proceed.
 
@@ -82,11 +82,13 @@ The creator and developer of PS Vita Recovery Menu (**DrinkingSubset**) is **not
 
 ---
 
-## PS Vita Recovery Menu v0.1-pre
+## PS Vita Recovery Menu v1.1.7
 
 A custom recovery environment for the PS Vita (and PSTV) running HENkaku / h-encore / Ensō.
-Hold R at power-on to boot directly into the recovery menu.
-Provides a complete toolkit for plugin management, system diagnostics, unbricking, storage repair, CPU control, and more.
+Hold R at power-on to boot directly into the recovery menu (Ensō required for boot entry).
+Provides a toolkit for plugin management, system diagnostics, unbricking, storage repair, CPU control, file transfer, and updates.
+
+See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 
 ## Features
 
@@ -100,61 +102,71 @@ Provides a complete toolkit for plugin management, system diagnostics, unbrickin
 * Sony Recovery
 * Storage Manager
 * File Manager
+* FTP Server
 * Cheat Manager
+* Check for Updates
 * Reboot
 * Power Off
 
 ### Plugin Manager
-Toggle any plugin on/off, remove duplicates, clean config.txt, save changes.
+Toggle any plugin on/off per section; changes save immediately (like AutoPlugin2). Remove duplicates (within the same section only) and clean config.txt. Every save backs up the original once per session (`config.txt.bak`) and writes through a verified temporary file.
 
 ### Advanced Tools
-* CPU Speed Control — independent ARM / GPU ES4 / BUS / XBR clock domains, persists across reboots
+* CPU Speed Control: independent ARM / GPU ES4 / BUS / XBR clock domains, persists across reboots (ARM up to 444 MHz)
 * Registry Hacks
-* Reset VSH (restart LiveSpace)
+* Reset VSH (restart LiveArea)
 * Suspend / Shut Down / Reboot
-* System Write Mode (with full warning dialog)
 * Boot Diagnostics
-* Boot Recovery Installer
+* Boot Recovery: installer for the boot plugins (Install / Update / Uninstall)
 
 ### System Information
 Firmware version, model, Ensō status, motherboard series, live clocks, battery health, memory, active tai config path.
 
 ### Restore / Unbrick
-* Safe Mode Boot
-* Reset taiHEN config
-* Backup / Restore ux0:tai/
-* Rebuild LiveArea Database
-* Official Sony recovery options
+* Safe Mode Boot: disables plugins but keeps HENkaku, SD2Vita (storagemgr / gamesd) and the boot recovery plugins, so you can still reach ux0: and this menu. The config is backed up first.
+* Reset taiHEN Config: writes safe defaults (keeping the essential plugins above). The old config is backed up first.
+* Backup / Restore tai/
+* Rebuild LiveArea Database (same flow as Sony Recovery, see below)
 
 ### Plugin Fix Mode
-Safe Mode, View & Toggle, Re-enable All, Reset to Minimal, Backup / Restore config.
+Safe Mode, View & Toggle, Re-enable All, Reset to Minimal (old config kept as `config.txt.before_reset`), Backup / Restore config.
 
 ### Sony Recovery
-Replicas of Sony's safe-mode options (Restart, Rebuild Database, Format Memory Card, Restore System, Update Firmware) with danger warnings.
+* Restart System
+* **Rebuild Database**: the app is a safe homebrew and cannot touch `ur0:shell`, so it asks the boot plugin to do it. At the next boot, before the home screen starts, `boot_recovery.skprx` renames `app.db` to `app.db.bak` and the system rebuilds the database. Folders and bubble order are reset (you are warned twice first); games, apps and saves are kept. Requires Ensō and the current boot plugin.
+* Format Memory Card (3-step confirm, keeps `ux0:tai/`)
+* Restore PS Vita System: a guide to Sony's own Safe Mode factory reset. This app cannot factory reset the Vita itself.
+* Update System Software (from `ux0:update/PSP2UPDAT.PUP`)
 
 ### Storage Manager (SD2Vita)
 Card & config info, mount point switching, StorageMgr install, format tools.
 
 ### File Manager
-Full partition browser with folder and file operations.
+Partition browser with folder and file operations. System partitions (`os0:`, `vs0:`) are read-only.
+
+### FTP Server
+Transfer files over Wi-Fi from your PC. There is no password, so use it on a network you trust.
 
 ### Cheat Manager
-Vita native cheats (.psv) and PSP CWCheat (.db) support.
+Vita native cheats and PSP CWCheat (.db) support.
+
+### Check for Updates
+Checks this GitHub repository for the latest release and downloads the `.vpk` to `ux0:downloads/` with a SHA-256 check. You install it yourself with VitaShell. Uses its own HTTPS client (mbedTLS with bundled root certificates) because the Vita's built-in SSL cannot connect to GitHub on older firmware.
 
 ---
 
 ## Installation
 
-Jailbreak required — HENkaku / h-encore / h-encore2 on firmware 3.60–3.74.
+Jailbreak required: HENkaku / h-encore / h-encore2 on firmware 3.60–3.74. Boot-time recovery (hold R) and Rebuild Database need Ensō.
 
-1. Download the latest `VitaRecovery.vpk` from the Releases page.
+1. Download the latest `VitaRecovery_vX.Y.Z.vpk` from the Releases page.
 2. Install via VitaShell.
-3. Launch the app once from LiveSpace (bubble will appear as Title ID `RECM00001`).
-4. Go to **Boot Recovery Installer → Install Boot Recovery**.
-   - Copies `boot_recovery.skprx` and `boot_trigger.suprx` to your active tai directory.
-   - Inserts both entries into `ur0:tai/config.txt` (or your active config).
-   - A backup of your config is automatically created.
-5. Reboot holding R to enter the recovery menu.
+3. Launch the app once from LiveArea (Title ID `RECM00001`).
+4. Go to **Advanced → Boot Recovery → Install / Update Boot Recovery**.
+   - Copies `boot_recovery.skprx` and `boot_trigger.suprx` to your active tai folder.
+   - Adds both entries to your active tai config (a backup is created first).
+   - Already installed? The same option updates the plugin files to the version in the app. Do this after every app update, then reboot.
+5. Reboot holding R to enter the recovery menu. Hold L instead to also apply Safe Mode (non-essential plugins disabled) before the menu opens.
 
 ---
 
@@ -164,54 +176,62 @@ Jailbreak required — HENkaku / h-encore / h-encore2 on firmware 3.60–3.74.
 export VITASDK=/usr/local/vitasdk
 export PATH=$VITASDK/bin:$PATH
 
+bash build.sh            # build
+bash build.sh clean      # clean build
+```
+
+Or with CMake directly:
+
+```bash
 cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=$VITASDK/share/vita.toolchain.cmake
 cmake --build build
 ```
 
-Output: `build/VitaRecovery.vpk`
+Output: `build/VitaRecovery.vpk`. Requires [VitaSDK](https://vitasdk.org/) and mbedTLS (`vdpm mbedtls`). Build in a folder path without spaces.
 
-Requires [VitaSDK](https://vitasdk.org/).
+The version number lives in the `VERSION` file. The boot plugins are built from `boot_plugin/` and `boot_trigger_user/` and packed into the VPK automatically.
 
 ---
 
 ## How the R-Trigger Boot System Works
 
-The boot recovery system uses two separate plugins that work together:
+The boot recovery system uses two plugins that work together:
 
 ```
 boot_recovery.skprx  (kernel plugin, loaded under *KERNEL)
 boot_trigger.suprx   (user plugin, loaded under *main)
 ```
 
-**What actually happens at boot:**
+**What happens at boot (v1.1.7):**
 
 ```mermaid
 flowchart TD
-    A[Power On] --> B[ScePsp2BootConfig]
-    B --> C[taiHEN loads *KERNEL plugins]
-    C --> D[boot_recovery.skprx loads FIRST under *KERNEL]
-    D --> E[Spawns a thread that waits for ctrl driver to initialize]
-    E --> F{R trigger held?}
-    F -->|Yes| G[Writes flag file: ur0:tai/recovery_boot_trigger]
-    F -->|No| H[Exits cleanly — zero overhead on normal boot]
-    G --> I[boot_recovery.skprx exits]
-    H --> I
-    I --> J[ScePsp2BootConfig launches shell.self]
-    J --> K[SceShell / LiveSpace starts]
-    K --> L[taiHEN loads *main plugins into SceShell process]
-    L --> M[boot_trigger.suprx loads inside SceShell]
-    M --> N{Flag file exists?}
-    N -->|No| O[Exits immediately — no overhead]
-    N -->|Yes| P[Spawns thread, waits for LiveSpace to be ready]
-    P --> Q[Deletes flag file]
-    Q --> R[Calls sceAppMgrLaunchAppByUri\npsgm:play?titleid=RECM00001]
-    R --> S[Recovery Menu launches]
-    O --> T[Normal LiveSpace boot]
+    A[Power On] --> B[taiHEN loads *KERNEL plugins]
+    B --> C[boot_recovery.skprx starts a thread]
+    C --> D{Rebuild Database requested?}
+    D -->|Yes, early boot| E[Rename app.db to app.db.bak, write result file]
+    D -->|No| F[Clear flags left from an earlier boot]
+    E --> F
+    F --> G{R or L held? polls up to 5 s}
+    G -->|Yes| H[Write ur0:tai/recovery_boot_trigger, plus safemode_boot_trigger for L]
+    G -->|No| I[Nothing written]
+    H --> J[SceShell starts, taiHEN loads *main plugins]
+    I --> J
+    J --> K[boot_trigger.suprx loads inside SceShell]
+    K --> L{Flag file exists OR R/L held now?}
+    L -->|No| M[Exit, normal boot]
+    L -->|Yes| N{2 launches already failed?}
+    N -->|Yes| O[Loop breaker: clear flags, normal boot]
+    N -->|No| P[Count this attempt, wait up to 60 s for LiveArea]
+    P --> Q[Launch RECM00001, retry for up to 15 s]
+    Q --> R[Recovery Menu starts: clears counter, reads flags, applies Safe Mode for L]
 ```
 
 **Why two plugins?**
 
-`sceAppMgrLaunchAppByUri` requires SceShell to already be running — it cannot be called from kernel space or before the shell initializes. The kernel plugin (`boot_recovery.skprx`) only writes a flag file. The user plugin (`boot_trigger.suprx`) runs inside the SceShell process where AppMgr is available, reads the flag, and launches the recovery app.
+`sceAppMgrLaunchAppByUri` needs SceShell to be running, so it cannot be called from the kernel plugin. The kernel plugin only checks the buttons early in boot and writes a flag file. The user plugin runs inside SceShell, reads the flag and launches the app.
+
+**Safety limits:** every wait has a time limit, and after two boots where the launch did not reach the app, the plugin stops auto-launching so the console always boots normally.
 
 ---
 
@@ -228,27 +248,36 @@ flowchart TD
 
 ## Safety Features
 
-- Never touches `vs0:` / `os0:` unless System Write Mode is manually enabled (with full warning dialog).
-- Config backed up before every install/uninstall operation.
-- Atomic config writes (`.tmp` → rename) prevent corruption on power loss.
-- L-trigger at boot triggers safe mode — disables non-essential plugins before menu opens.
+- `os0:` / `vs0:` are never written. File Manager shows them read-only.
+- Plugin manager, Plugin Fix, Restore / Unbrick and the Boot Recovery Installer all back up the config before changing it, write to a temporary file, read it back to check it, and only then replace the original (the old file is kept as `.old` until the swap succeeds).
+- Safe Mode and Reset keep HENkaku, SD2Vita and boot recovery plugins enabled, so ux0: and this menu stay reachable.
+- Confirmation screens need a fresh button press (a held X cannot skip them).
+- Rebuild Database keeps the previous database as `ur0:shell/db/app.db.bak` and never runs while the home screen is using it.
+- L-trigger at boot applies safe mode (disables non-essential plugins) before the menu opens.
+- Boot loop breaker in the boot plugin (see above).
+
 ---
 
 ## Known Issues
 
-- PS Vita 2000 model detection shows incorrect model name in System Info — under investigation.
-- Boot recovery does not work on h-encore2 (3.74) without Ensō, because the kernel hook requires taiHEN to load at coldboot. Normal bubble launch works fine on all firmware versions.
+- PS Vita 2000 (Slim): System Info shows the wrong model name, firmware (3.73 instead of 3.65) and motherboard. This needs privileged access to fix and is under investigation.
+- Boot recovery (hold R) and Rebuild Database do not work on h-encore / h-encore2 without Ensō, because taiHEN does not load at cold boot there. Launching the app from its bubble works on all firmware versions.
+- PS TV: the R trigger at boot is not confirmed to work (no tester yet).
+- Custom boot splash + holding R could cause a boot loop on older versions. v1.1.7 adds time limits and a loop breaker; feedback welcome.
+- The FTP server has no password.
 
 ---
 
 ## Future Plans
 
-- Vita 2000 model detection fix
+- Back up and restore the home screen layout (folders and bubble order) around Rebuild Database
+- Crash triage screen and an opt-in diagnostic report file
+- Danger confirmations with a countdown
+- Vita 2000 model / firmware detection fix
+- PS TV boot trigger support
 - Live taiHEN module reload
 - Per-TitleID CPU clock profiles
-- Registry editor
-- Full Modoru integration for one-click downgrade/restore
-- FTP Server
+- Firmware tools (guide / PUP checker for Modoru; research only)
 
 ---
 
