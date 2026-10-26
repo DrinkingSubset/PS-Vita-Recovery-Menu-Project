@@ -203,10 +203,10 @@ static void vita_editor(void *font, const char *path) {
     while (1) {
         display_start(); display_clear(COLOR_BG);
         char th[64];
-        snprintf(th, sizeof(th), "Vita Cheats — %s", g_v_titleid);
+        snprintf(th, sizeof(th), "Vita Cheats - %s", g_v_titleid);
         title_bar(th);
         draw_text(MENU_X, MENU_Y, COLOR_DIM,
-                  dirty ? "* unsaved — press Triangle to save *" : "");
+                  dirty ? "* unsaved - press Triangle to save *" : "");
 
         for (int i = scroll; i < g_vcheat_count && i < scroll+VIS; i++) {
             int y = MENU_Y + LINE_H + (i-scroll)*(LINE_H+2);
@@ -274,7 +274,7 @@ static void vita_cheat_picker(void *font) {
 
     while (1) {
         display_start(); display_clear(COLOR_BG);
-        title_bar("Vita Cheat Manager — Select Game");
+        title_bar("Vita Cheat Manager - Select Game");
 
         if (count == 0) {
             draw_text(MENU_X, MENU_Y,          COLOR_DIM, "No .psv files found in:");
@@ -425,11 +425,11 @@ static void cw_edit_game(void *font, CWGame *game) {
     while (1) {
         display_start(); display_clear(COLOR_BG);
         char th[96];
-        snprintf(th, sizeof(th), "CWCheat — %s",
+        snprintf(th, sizeof(th), "CWCheat - %s",
                  game->title[0] ? game->title : game->id);
         title_bar(th);
         draw_text(MENU_X, MENU_Y, COLOR_DIM,
-                  dirty ? "* unsaved — press Triangle to save *" : "");
+                  dirty ? "* unsaved - press Triangle to save *" : "");
 
         if (cc == 0) {
             draw_text(MENU_X, MENU_Y+LINE_H, COLOR_DIM,
@@ -525,7 +525,7 @@ static void cwcheat_manager(void *font) {
 
     while (1) {
         display_start(); display_clear(COLOR_BG);
-        title_bar("CWCheat DB Manager — Select Game");
+        title_bar("CWCheat DB Manager - Select Game");
         char hdr[64];
         snprintf(hdr, sizeof(hdr), "%d games in CHEAT.db:", g_cw_gcount);
         draw_text(MENU_X, MENU_Y, COLOR_DIM, hdr);
@@ -592,7 +592,7 @@ void cheat_manager_screen_run(void *font) {
         display_hline(0, TITLE_LINE, SCREEN_W, COLOR_GREEN);
 
         draw_text(MENU_X, MENU_Y, COLOR_DIM,
-                  "Changes written to disk — applied on next game launch.");
+                  "Changes written to disk - applied on next game launch.");
 
         for (int i = 0; i < 2; i++) {
             int y = MENU_Y + LINE_H*2 + i*(LINE_H*2+8);

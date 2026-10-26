@@ -19,6 +19,9 @@
 #include <stdlib.h>
 
 #include "official_recovery.h"
+#include "plugins.h"
+#include "compat.h"
+#include <strings.h>
 #include "draw.h"
 #include "menu.h"
 
@@ -101,6 +104,13 @@ static int confirm_screen(void *font, const char *title,
     }
 }
 
+/* Cancel: go straight back to the list (no "SUCCESS / Cancelled" screen).
+ * Wait for O to be released first, or the list would see it and close too. */
+static void cancel_return(void) {
+    SceCtrlData d;
+    do { sceCtrlPeekBufferPositive(0, &d, 1); } while (d.buttons);
+}
+
 /* ── Result screen ───────────────────────────────────────────────────────── */
 static void result_screen(void *font, const char *title,
                            int ok, int offer_reboot) {
@@ -134,6 +144,7 @@ static void result_screen(void *font, const char *title,
         sceCtrlPeekBufferPositive(0, &ctrl, 1);
         if (btn_pressed(&ctrl, &old, SCE_CTRL_CIRCLE)) {
             g_msg2[0] = g_msg3[0] = '\0';   /* don't leak into the next result */
+            cancel_return();   /* release O before the list sees it */
             return;
         }
         if (offer_reboot && ok &&
@@ -163,7 +174,7 @@ static void recursive_delete(const char *path) {
 
 static void do_restart_system(void *font) {
     display_start(); display_clear(COLOR_BG);
-    draw_titlebar("Sony Recovery — Restart System");
+    draw_titlebar("Sony Recovery - Restart System");
     draw_text(MENU_X, TITLE_H + 8, COLOR_TEXT, "Rebooting...");
     draw_footerbar("");
     display_end();
@@ -185,107 +196,159 @@ static const char *io_err_name(int e) {
     }
 }
 
-/* Copy src to dst. Returns 0 on success, else the failing error code. */
-static int copy_file(const char *src, const char *dst) {
-    SceUID in = sceIoOpen(src, SCE_O_RDONLY, 0);
-    if (in < 0) return in;
-    SceUID out = sceIoOpen(dst, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
-    if (out < 0) { sceIoClose(in); return out; }
-    static char buf[32 * 1024];
-    int r, ret = 0;
-    while ((r = sceIoRead(in, buf, sizeof(buf))) > 0) {
-        int w = sceIoWrite(out, buf, r);
-        if (w != r) { ret = (w < 0) ? w : -1; break; }
+/* ── Rebuild Database (v1.1.6) ─────────────────────────────────────────────
+ * This app is a safe homebrew and cannot see ur0:shell, so it cannot delete
+ * app.db itself. It writes a request flag; our kernel boot plugin
+ * (boot_recovery.skprx) deletes app.db at the next boot, before the home
+ * screen starts, and writes the result for main.c to show. */
+#define REBUILD_FLAG    "ur0:tai/rebuild_db_trigger"
+#define BOOT_SKPRX_SRC  "app0:boot_recovery.skprx"
+
+/* 1 if the two files have identical contents */
+static int files_equal(const char *a, const char *b) {
+    SceUID fa = sceIoOpen(a, SCE_O_RDONLY, 0);
+    if (fa < 0) return 0;
+    SceUID fb = sceIoOpen(b, SCE_O_RDONLY, 0);
+    if (fb < 0) { sceIoClose(fa); return 0; }
+    static char ba[4096], bb[4096];
+    int same = 1;
+    while (1) {
+        int ra = sceIoRead(fa, ba, sizeof(ba));
+        int rb = sceIoRead(fb, bb, sizeof(bb));
+        if (ra != rb || ra < 0) { same = 0; break; }
+        if (ra == 0) break;
+        if (memcmp(ba, bb, ra) != 0) { same = 0; break; }
     }
-    if (r < 0) ret = r;
-    sceIoClose(in);
-    sceIoClose(out);
-    if (ret != 0) sceIoRemove(dst);
-    return ret;
+    sceIoClose(fa); sceIoClose(fb);
+    return same;
 }
 
-#define APP_DB_BACKUP_DIR  "ux0:data/VitaRecovery"
-#define APP_DB_BACKUP      "ux0:data/VitaRecovery/app.db.bak"
+/* 0 = not installed/enabled, 1 = installed but older build, 2 = current */
+static int boot_plugin_state(void) {
+    plugins_load();
+    int listed = 0;
+    for (int i = 0; i < plugins_get_count(); i++)
+        if (strcasecmp(plugins_get_name(i), "boot_recovery.skprx") == 0 &&
+            strcmp(plugins_get_section(i), "KERNEL") == 0 &&
+            plugins_is_enabled(i)) {
+            listed = 1;
+            if (files_equal(plugins_get_path(i), BOOT_SKPRX_SRC)) return 2;
+        }
+    return listed ? 1 : 0;
+}
+
+/* Full-screen warning with several lines. Returns 1 = X, 0 = O. */
+static int warn_screen(const char *title, const char *const *lines, int n) {
+    SceCtrlData old, ctrl;
+    sceCtrlPeekBufferPositive(0, &old, 1);   /* held buttons are not presses */
+    while (1) {
+        display_start();
+        display_clear(COLOR_BG);
+        draw_titlebar(title);
+        int y = TITLE_H + 8;
+        display_rect(MENU_X - 8, y, SCREEN_W - (MENU_X - 8) * 2,
+                     LINE_H * (n + 1) + 8, RGBA8(60, 0, 0, 255));
+        draw_text(MENU_X, y + 4, COLOR_YELLOW, "!! WARNING !!");
+        for (int i = 0; i < n; i++)
+            draw_text(MENU_X, y + 4 + LINE_H * (i + 1), COLOR_TEXT, lines[i]);
+        int by = y + LINE_H * (n + 1) + 20;
+        draw_text(MENU_X,           by, COLOR_GREEN, "[X] Continue");
+        draw_text(MENU_X + 16 * 15, by, COLOR_RED,   "[O] Cancel");
+        draw_footerbar("[X] Continue    [O] Cancel");
+        display_end();
+
+        sceCtrlPeekBufferPositive(0, &ctrl, 1);
+        if (btn_pressed(&ctrl, &old, SCE_CTRL_CROSS))  return 1;
+        if (btn_pressed(&ctrl, &old, SCE_CTRL_CIRCLE)) return 0;
+        old = ctrl;
+    }
+}
 
 static void do_rebuild_database(void *font) {
     g_msg2[0] = g_msg3[0] = '\0';
-    if (!confirm_screen(font,
-            "Sony Recovery — Rebuild Database",
-            "app.db will be deleted and rebuilt on next boot.",
-            "Games and saves are kept. Folders/layout reset.")) {
-        snprintf(g_msg, sizeof(g_msg), "Cancelled.");
-        result_screen(font, "Rebuild Database", 1, 0);
-        return;
-    }
     SceIoStat st;
-    int gs = sceIoGetstat(APP_DB_PATH, &st);
-    if (gs < 0) {
-        /* Every Vita has this file, so "not found" usually means this app
-         * is not allowed to see ur0:shell. Probe the folders so the next
-         * test tells us exactly where access stops. */
-        SceIoStat ps;
-        int sh = sceIoGetstat("ur0:shell", &ps);
-        int db = sceIoGetstat("ur0:shell/db", &ps);
-        SceUID dd = sceIoDopen("ur0:shell/db");
-        int dn = 0;
-        if (dd >= 0) {
-            SceIoDirent de;
-            while (sceIoDread(dd, &de) > 0) dn++;
-            sceIoDclose(dd);
+
+    /* Already requested? Offer reboot or cancelling the request. */
+    if (sceIoGetstat(REBUILD_FLAG, &st) >= 0) {
+        static const char *const L[] = {
+            "A database rebuild is already scheduled.",
+            "It runs at the next boot (restart the Vita).",
+            "",
+            "[X] Keep it scheduled   [O] Cancel the rebuild",
+        };
+        if (!warn_screen("Sony Recovery - Rebuild Database", L, 4)) {
+            sceIoRemove(REBUILD_FLAG);
+            snprintf(g_msg, sizeof(g_msg), "Rebuild request removed.");
+            snprintf(g_msg2, sizeof(g_msg2), "Nothing will change at next boot.");
+            result_screen(font, "Rebuild Database", 1, 0);
+        } else {
+            snprintf(g_msg, sizeof(g_msg), "Rebuild still scheduled for next boot.");
+            result_screen(font, "Rebuild Database", 1, 1);
         }
-        snprintf(g_msg,  sizeof(g_msg),  "Can't see app.db (0x%08X %s)",
-                 (unsigned int)gs, gs == (int)0x80010002 ? "ENOENT" : "");
-        snprintf(g_msg2, sizeof(g_msg2), "shell %08X  db %08X  dir %08X/%d",
-                 (unsigned int)sh, (unsigned int)db,
-                 (unsigned int)(dd < 0 ? dd : 0), dn);
-        snprintf(g_msg3, sizeof(g_msg3),
-                 "Nothing deleted. Use Sony Safe Mode for now.");
+        return;
+    }
+
+    /* The boot plugin does the actual work, so it must be installed and
+     * be the build that knows about rebuilds. */
+    int bp = boot_plugin_state();
+    if (bp != 2) {
+        snprintf(g_msg, sizeof(g_msg), bp == 0
+                 ? "Boot plugin (boot_recovery.skprx) not installed."
+                 : "Boot plugin is an older version.");
+        snprintf(g_msg2, sizeof(g_msg2),
+                 "Install it from Recovery Installer, reboot,");
+        snprintf(g_msg3, sizeof(g_msg3), "then come back here. Nothing changed.");
         result_screen(font, "Rebuild Database", 0, 0);
         return;
     }
 
-    /* Safety copy first, so the old database can be put back by hand */
-    sceIoMkdir(APP_DB_BACKUP_DIR, 0777);
-    int bk = copy_file(APP_DB_PATH, APP_DB_BACKUP);
-
-    int rm = sceIoRemove(APP_DB_PATH);
-    if (rm < 0) {
-        snprintf(g_msg,  sizeof(g_msg),  "ERROR: Could not delete app.db.");
-        snprintf(g_msg2, sizeof(g_msg2), "Code 0x%08X (%s)",
-                 (unsigned int)rm, io_err_name(rm));
-        snprintf(g_msg3, sizeof(g_msg3),
-                 "Use Sony Safe Mode > Rebuild Database instead.");
-        result_screen(font, "Rebuild Database", 0, 0);
+    static const char *const W[] = {
+        "This deletes the system app database (app.db).",
+        "The Vita rebuilds it at the next boot.",
+        "",
+        "YOUR HOME SCREEN LAYOUT WILL BE RESET:",
+        "- All FOLDERS are removed.",
+        "- Bubbles go back to default order.",
+        "Games, apps and saves are NOT deleted.",
+        "The first boot after this takes longer.",
+    };
+    if (!warn_screen("Sony Recovery - Rebuild Database", W, 8)) {
+        cancel_return();
+        return;
+    }
+    if (!confirm_screen(font,
+            "Rebuild Database [2/2]",
+            "Are you sure? Folders and layout will be lost.",
+            "Press X to schedule the rebuild for next boot.")) {
+        cancel_return();
         return;
     }
 
-    /* Leftover SQLite side files would confuse the rebuild; remove them too.
-     * Missing files are fine. */
-    sceIoRemove("ur0:shell/db/app.db-journal");
-    sceIoRemove("ur0:shell/db/app.db-wal");
-    sceIoRemove("ur0:shell/db/app.db-shm");
+    /* Firmware without Ensō loads plugins too late in boot to do this */
+    int late = (g_compat.fw_tier >= FW_367_HENCORE && g_compat.fw_tier != FW_UNKNOWN);
 
-    /* Confirm it is really gone */
-    if (sceIoGetstat(APP_DB_PATH, &st) >= 0) {
-        snprintf(g_msg,  sizeof(g_msg),  "ERROR: app.db still exists after delete.");
-        snprintf(g_msg2, sizeof(g_msg2), "Reboot and try again, or use Safe Mode.");
+    sceIoMkdir("ur0:tai", 0777);
+    SceUID fd = sceIoOpen(REBUILD_FLAG, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
+    if (fd < 0) {
+        snprintf(g_msg,  sizeof(g_msg),  "ERROR: Could not write the request.");
+        snprintf(g_msg2, sizeof(g_msg2), "Code 0x%08X (%s)", (unsigned int)fd, io_err_name(fd));
         result_screen(font, "Rebuild Database", 0, 0);
         return;
     }
+    sceIoWrite(fd, "1", 1);
+    sceIoClose(fd);
 
-    snprintf(g_msg, sizeof(g_msg), "app.db deleted. Reboot to rebuild.");
-    if (bk == 0)
-        snprintf(g_msg2, sizeof(g_msg2), "Backup: ux0:data/VitaRecovery/app.db.bak");
-    else
-        snprintf(g_msg2, sizeof(g_msg2), "Backup failed 0x%08X (db still deleted)",
-                 (unsigned int)bk);
-    snprintf(g_msg3, sizeof(g_msg3), "First boot after this takes longer.");
+    snprintf(g_msg,  sizeof(g_msg),  "Rebuild scheduled for the next boot.");
+    snprintf(g_msg2, sizeof(g_msg2), late
+             ? "Note: needs Enso; may be skipped on this FW."
+             : "The result is shown when this app opens.");
+    snprintf(g_msg3, sizeof(g_msg3), "Press Start to reboot now.");
     result_screen(font, "Rebuild Database", 1, 1);
 }
 
 static void do_format_memory_card(void *font) {
     if (!confirm_screen(font,
-            "Sony Recovery — Format Memory Card",
+            "Sony Recovery - Format Memory Card",
             "ALL data on ux0: will be deleted.",
             "ux0:tai/ is preserved. HENkaku stays intact."))
         goto cancelled;
@@ -296,12 +359,12 @@ static void do_format_memory_card(void *font) {
         goto cancelled;
     if (!confirm_screen(font,
             "Format Memory Card [FINAL]",
-            "LAST CHANCE — press X to begin format.",
+            "LAST CHANCE - press X to begin format.",
             "Press O to cancel."))
         goto cancelled;
 
     display_start(); display_clear(COLOR_BG);
-    draw_titlebar("Sony Recovery — Format Memory Card");
+    draw_titlebar("Sony Recovery - Format Memory Card");
     draw_text(MENU_X, TITLE_H + 8,          COLOR_YELLOW, "Formatting...");
     draw_text(MENU_X, TITLE_H + 8 + LINE_H, COLOR_DIM,    "Do NOT power off.");
     draw_footerbar("");
@@ -329,13 +392,12 @@ static void do_format_memory_card(void *font) {
     return;
 
 cancelled:
-    snprintf(g_msg, sizeof(g_msg), "Cancelled.");
-    result_screen(font, "Format Memory Card", 1, 0);
+    cancel_return();
 }
 
 static void do_restore_system(void *font) {
     if (!confirm_screen(font,
-            "Sony Recovery — Restore PS Vita System",
+            "Sony Recovery - Restore PS Vita System",
             "ALL system data and accounts will be erased.",
             "The system resets to factory state."))
         goto cancelled;
@@ -346,12 +408,12 @@ static void do_restore_system(void *font) {
         goto cancelled;
     if (!confirm_screen(font,
             "Restore PS Vita System [FINAL]",
-            "FINAL WARNING — irrecoverable factory reset.",
+            "FINAL WARNING - irrecoverable factory reset.",
             "Press X to confirm. Press O to cancel."))
         goto cancelled;
 
     display_start(); display_clear(COLOR_BG);
-    draw_titlebar("Sony Recovery — Restore PS Vita System");
+    draw_titlebar("Sony Recovery - Restore PS Vita System");
     draw_text(MENU_X, TITLE_H + 8,          COLOR_YELLOW, "Restoring...");
     draw_text(MENU_X, TITLE_H + 8 + LINE_H, COLOR_DIM,    "Do NOT power off.");
     draw_footerbar("");
@@ -369,24 +431,22 @@ static void do_restore_system(void *font) {
     return;
 
 cancelled:
-    snprintf(g_msg, sizeof(g_msg), "Cancelled.");
-    result_screen(font, "Restore PS Vita System", 1, 0);
+    cancel_return();
 }
 
 static void do_update_system(void *font) {
     if (!confirm_screen(font,
-            "Sony Recovery — Update System Software",
+            "Sony Recovery - Update System Software",
             "UPDATING WILL REMOVE HENkaku / taiHEN.",
             "Only proceed if you intend to update FW.")) {
-        snprintf(g_msg, sizeof(g_msg), "Cancelled. CFW preserved.");
-        result_screen(font, "Update System Software", 1, 0);
+        cancel_return();
         return;
     }
     SceIoStat st;
     if (sceIoGetstat(UPDATE_PUP, &st) >= 0) {
         snprintf(g_msg, sizeof(g_msg), "Found PSP2UPDAT.PUP. Rebooting...");
         display_start(); display_clear(COLOR_BG);
-        draw_titlebar("Sony Recovery — Update System Software");
+        draw_titlebar("Sony Recovery - Update System Software");
         draw_text(MENU_X, TITLE_H + 8,
                   COLOR_YELLOW, "Starting update from memory card...");
         draw_text(MENU_X, TITLE_H + 8 + LINE_H, COLOR_DIM, "Do NOT power off.");
@@ -413,7 +473,7 @@ static const OfficialOption OPTIONS[] = {
       "Cold reboot. Same as power off and on.",
       do_restart_system, 0 },
     { "2. Rebuild Database",
-      "Deletes app.db (backup kept). Rebuilt on next boot.",
+      "Rebuilt at next boot. Resets folders and layout.",
       do_rebuild_database, 0 },
     { "3. Format Memory Card",
       "Erases ALL of ux0:. ux0:tai/ preserved. IRREVERSIBLE.",

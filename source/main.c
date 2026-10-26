@@ -48,6 +48,30 @@ int main(int argc, char *argv[]) {
     if (booted_via_recovery) sceIoRemove(FLAG_RECOVERY);
     if (booted_via_safemode) sceIoRemove(FLAG_SAFEMODE);
 
+    /* v1.1.6: result of a Rebuild Database request, written by the boot
+     * plugin during this boot. Show it once on the main menu, then delete. */
+    {
+        SceUID fd = sceIoOpen("ur0:tai/rebuild_db_result.txt", SCE_O_RDONLY, 0);
+        if (fd >= 0) {
+            char rb[64] = {0};
+            sceIoRead(fd, rb, sizeof(rb) - 1);
+            sceIoClose(fd);
+            sceIoRemove("ur0:tai/rebuild_db_result.txt");
+            unsigned int code = 0;
+            if (sscanf(rb, "appdb=%x", &code) == 1) {
+                if (code == 0)
+                    snprintf(g_boot_notice, sizeof(g_boot_notice),
+                             "Database rebuilt at boot. Layout was reset.");
+                else
+                    snprintf(g_boot_notice, sizeof(g_boot_notice),
+                             "Rebuild failed at boot: 0x%08X. Nothing changed.", code);
+            } else if (strncmp(rb, "skipped=", 8) == 0) {
+                snprintf(g_boot_notice, sizeof(g_boot_notice),
+                         "Rebuild skipped: plugin loaded late (needs Enso).");
+            }
+        }
+    }
+
     if (booted_via_safemode) {
         /* Auto-apply Safe Mode: load config and disable non-essential plugins */
         plugins_load();

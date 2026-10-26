@@ -320,7 +320,7 @@ static void show_progress(void *font, const char *subtitle, const char *msg) {
     s2v_titlebar(subtitle);
     draw_text(MENU_X, TITLE_H + 8,          COLOR_YELLOW, msg);
     draw_text(MENU_X, TITLE_H + 8 + LINE_H, COLOR_DIM,
-              "Please wait — do NOT remove the card.");
+              "Please wait - do NOT remove the card.");
     s2v_footer("");
     display_end();
 }
@@ -363,7 +363,7 @@ static void op_show_config(void *font) {
     do { sceCtrlPeekBufferPositive(0, &old, 1); } while (old.buttons);
     while (1) {
         display_start(); display_clear(COLOR_BG);
-        s2v_titlebar("SD2Vita — Card & Config Info");
+        s2v_titlebar("SD2Vita - Card & Config Info");
 
         int y = TITLE_H + 8;
         draw_text(MENU_X, y, COLOR_DIM, "SD2Vita detected:");
@@ -400,8 +400,8 @@ static void op_show_config(void *font) {
         draw_text(MENU_X + 16, y,
                   sm ==  1 ? COLOR_GREEN :
                   sm == -1 ? COLOR_RED   : COLOR_YELLOW,
-                  sm ==  1 ? "YES — active" :
-                  sm == -1 ? "Plugin file missing" : "NO — not installed");
+                  sm ==  1 ? "YES - active" :
+                  sm == -1 ? "Plugin file missing" : "NO - not installed");
 
         s2v_footer("[O] Back");
         display_end();
@@ -428,7 +428,7 @@ static void op_switch_mount(void *font) {
 
     while (1) {
         display_start(); display_clear(COLOR_BG);
-        s2v_titlebar("SD2Vita — Switch Mount Point");
+        s2v_titlebar("SD2Vita - Switch Mount Point");
 
         int y = TITLE_H + 8;
         draw_text(MENU_X, y, COLOR_DIM, "Current config:"); y += LINE_H;
@@ -438,7 +438,7 @@ static void op_switch_mount(void *font) {
                      g_cfg.gcd, g_cfg.mcd, g_cfg.intv, g_cfg.uma);
             draw_text(MENU_X, y, COLOR_TEXT, line);
         } else {
-            draw_text(MENU_X, y, COLOR_YELLOW, "No config — will be created.");
+            draw_text(MENU_X, y, COLOR_YELLOW, "No config - will be created.");
         }
         y += LINE_H + 8;
         draw_text(MENU_X, y, COLOR_DIM, "Select preset:"); y += LINE_H + 4;
@@ -469,7 +469,7 @@ static void op_switch_mount(void *font) {
             set_status(r == 0 ? "Config saved. Reboot to apply."
                                : "ERROR: Could not write storage_config.txt");
             log_close();
-            show_result(font, "SD2Vita — Switch Mount Point", r == 0, 1);
+            show_result(font, "SD2Vita - Switch Mount Point", r == 0, 1);
             do { sceCtrlPeekBufferPositive(0, &old, 1); } while (old.buttons);
             return;
         }
@@ -490,7 +490,7 @@ static void op_storagemgr(void *font) {
         set_status("StorageMgr already in tai config. Nothing to do.");
     } else {
         if (confirm_dialog(font,
-                "SD2Vita — Install StorageMgr",
+                "SD2Vita - Install StorageMgr",
                 "Add storagemgr.skprx to *KERNEL in tai config?")) {
             r = storagemgr_add_to_tai_config();
             set_status(r == 0
@@ -502,7 +502,7 @@ static void op_storagemgr(void *font) {
         }
     }
     log_close();
-    show_result(font, "SD2Vita — StorageMgr", r >= 0, r == 0);
+    show_result(font, "SD2Vita - StorageMgr", r >= 0, r == 0);
 }
 
 /* 4 — Copy ux0 → SD2Vita */
@@ -513,7 +513,7 @@ static void op_copy_ux0_to_sd(void *font) {
     char warn[256];
     snprintf(warn, sizeof(warn),
              "Copy all of ux0: to %s? Can take many minutes.", sd_mp);
-    if (!confirm_dialog(font, "SD2Vita — Copy ux0 to SD", warn)) {
+    if (!confirm_dialog(font, "SD2Vita - Copy ux0 to SD", warn)) {
         set_status("Cancelled."); return;
     }
 
@@ -522,16 +522,16 @@ static void op_copy_ux0_to_sd(void *font) {
     if (sceIoGetstat(sd_mp, &st) < 0) {
         set_status("ERROR: SD2Vita not mounted. Load StorageMgr and reboot first.");
         log_close();
-        show_result(font, "SD2Vita — Copy ux0 to SD", 0, 0);
+        show_result(font, "SD2Vita - Copy ux0 to SD", 0, 0);
         return;
     }
-    show_progress(font, "SD2Vita — Copy ux0 to SD",
-                  "Copying ux0: to SD2Vita — please wait...");
+    show_progress(font, "SD2Vita - Copy ux0 to SD",
+                  "Copying ux0: to SD2Vita - please wait...");
 
     SceUID dfd = sceIoDopen("ux0:");
     if (dfd < 0) {
         set_status("ERROR: Cannot open ux0:");
-        log_close(); show_result(font, "SD2Vita — Copy ux0 to SD", 0, 0);
+        log_close(); show_result(font, "SD2Vita - Copy ux0 to SD", 0, 0);
         return;
     }
     SceIoDirent e; int total = 0;
@@ -550,7 +550,7 @@ static void op_copy_ux0_to_sd(void *font) {
     snprintf(msg, sizeof(msg), "Done. %d items copied to %s.", total, sd_mp);
     set_status(msg);
     log_close();
-    show_result(font, "SD2Vita — Copy ux0 to SD", 1, 0);
+    show_result(font, "SD2Vita - Copy ux0 to SD", 1, 0);
 }
 
 /* 5 — Copy SD2Vita → ux0 */
@@ -561,7 +561,7 @@ static void op_copy_sd_to_ux0(void *font) {
     char warn[256];
     snprintf(warn, sizeof(warn),
              "Copy all of %s to ux0:? May overwrite existing files.", sd_mp);
-    if (!confirm_dialog(font, "SD2Vita — Copy SD to ux0", warn)) {
+    if (!confirm_dialog(font, "SD2Vita - Copy SD to ux0", warn)) {
         set_status("Cancelled."); return;
     }
 
@@ -569,16 +569,16 @@ static void op_copy_sd_to_ux0(void *font) {
     SceIoStat st;
     if (sceIoGetstat(sd_mp, &st) < 0) {
         set_status("ERROR: SD2Vita not mounted.");
-        log_close(); show_result(font, "SD2Vita — Copy SD to ux0", 0, 0);
+        log_close(); show_result(font, "SD2Vita - Copy SD to ux0", 0, 0);
         return;
     }
-    show_progress(font, "SD2Vita — Copy SD to ux0",
-                  "Copying SD2Vita to ux0: — please wait...");
+    show_progress(font, "SD2Vita - Copy SD to ux0",
+                  "Copying SD2Vita to ux0: - please wait...");
 
     SceUID dfd = sceIoDopen(sd_mp);
     if (dfd < 0) {
         set_status("ERROR: Cannot open SD2Vita mount point.");
-        log_close(); show_result(font, "SD2Vita — Copy SD to ux0", 0, 0);
+        log_close(); show_result(font, "SD2Vita - Copy SD to ux0", 0, 0);
         return;
     }
     SceIoDirent e; int total = 0;
@@ -597,7 +597,7 @@ static void op_copy_sd_to_ux0(void *font) {
     snprintf(msg, sizeof(msg), "Done. %d items copied to ux0:.", total);
     set_status(msg);
     log_close();
-    show_result(font, "SD2Vita — Copy SD to ux0", 1, 0);
+    show_result(font, "SD2Vita - Copy SD to ux0", 1, 0);
 }
 
 /* 6 — Format SD2Vita card */
@@ -608,11 +608,11 @@ static void op_format_sd(void *font) {
     char warn[256];
     snprintf(warn, sizeof(warn),
              "ALL data on %s (SD2Vita) will be permanently erased.", mp);
-    if (!confirm_dialog(font, "SD2Vita — Format Card", warn)) {
+    if (!confirm_dialog(font, "SD2Vita - Format Card", warn)) {
         set_status("Cancelled."); return;
     }
-    if (!confirm_dialog(font, "SD2Vita — Format Card [2/2]",
-                        "Final confirmation — CANNOT be undone.")) {
+    if (!confirm_dialog(font, "SD2Vita - Format Card [2/2]",
+                        "Final confirmation - CANNOT be undone.")) {
         set_status("Cancelled."); return;
     }
 
@@ -620,15 +620,15 @@ static void op_format_sd(void *font) {
     SceIoStat st;
     if (sceIoGetstat(mp, &st) < 0) {
         set_status("ERROR: SD2Vita not mounted. Is StorageMgr loaded?");
-        log_close(); show_result(font, "SD2Vita — Format Card", 0, 0);
+        log_close(); show_result(font, "SD2Vita - Format Card", 0, 0);
         return;
     }
-    show_progress(font, "SD2Vita — Format Card", "Formatting...");
+    show_progress(font, "SD2Vita - Format Card", "Formatting...");
 
     SceUID dfd = sceIoDopen(mp);
     if (dfd < 0) {
         set_status("ERROR: Cannot open SD2Vita mount point.");
-        log_close(); show_result(font, "SD2Vita — Format Card", 0, 0);
+        log_close(); show_result(font, "SD2Vita - Format Card", 0, 0);
         return;
     }
     SceIoDirent e; int n = 0;
@@ -642,10 +642,10 @@ static void op_format_sd(void *font) {
     sceIoDclose(dfd);
     char msg[256];
     snprintf(msg, sizeof(msg),
-             "Format complete — %d items removed from %s.", n, mp);
+             "Format complete - %d items removed from %s.", n, mp);
     set_status(msg);
     log_close();
-    show_result(font, "SD2Vita — Format Card", 1, 0);
+    show_result(font, "SD2Vita - Format Card", 1, 0);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -705,7 +705,7 @@ void sd2vita_screen_run(void *font) {
             draw_text(MENU_X, TITLE_H + 4, COLOR_GREEN, det);
         } else {
             draw_text(MENU_X, TITLE_H + 4, COLOR_YELLOW,
-                      "Storage device NOT detected — StorageMgr not loaded");
+                      "Storage device NOT detected - StorageMgr not loaded");
         }
         display_hline(0, TITLE_H + LINE_H + 4, SCREEN_W, RGBA8(60, 60, 60, 255));
 

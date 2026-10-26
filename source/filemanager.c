@@ -408,7 +408,7 @@ static void fm_op_menu(const char *filepath, const char *name,
 /* ── Create folder ───────────────────────────────────────────────────────── */
 static void fm_create_folder(void) {
     if (g_cwd_readonly) {
-        fm_message("Read-only partition — cannot create folder.", COLOR_RED);
+        fm_message("Read-only partition - cannot create folder.", COLOR_RED);
         return;
     }
     if (g_cwd[0] == '\0') {

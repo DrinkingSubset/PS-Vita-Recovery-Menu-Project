@@ -92,7 +92,7 @@ static int confirm_dialog(void *font, const char *action_name) {
     while (1) {
         display_start();
         display_clear(COLOR_BG);
-        draw_titlebar("Restore / Unbrick — Confirm");
+        draw_titlebar("Restore / Unbrick - Confirm");
 
         int y = TITLE_H + 12;
         display_rect(MENU_X - 8, y,
@@ -127,7 +127,7 @@ static void result_screen(void *font, RestoreStatus status) {
     while (1) {
         display_start();
         display_clear(COLOR_BG);
-        draw_titlebar("Restore / Unbrick — Result");
+        draw_titlebar("Restore / Unbrick - Result");
 
         int y = TITLE_H + 8;
         draw_text(MENU_X, y,              col,        head);
@@ -180,7 +180,7 @@ void restore_screen_run(void *font) {
         if (backup_exists)
             draw_text(MENU_X, BAKSTAT_Y + 4, COLOR_GREEN,  "Backup: Found");
         else
-            draw_text(MENU_X, BAKSTAT_Y + 4, COLOR_RED,    "Backup: None — backup before restoring!");
+            draw_text(MENU_X, BAKSTAT_Y + 4, COLOR_RED,    "Backup: None - backup before restoring!");
 
         /* Dim separator below banner */
         display_hline(0, SEP_Y, SCREEN_W, RGBA8(60, 60, 60, 255));

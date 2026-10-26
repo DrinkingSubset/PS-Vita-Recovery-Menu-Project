@@ -32,6 +32,7 @@ typedef struct Menu {
 
 void menu_run(void);
 int  menu_dev_unlock_enabled(void);   /* returns 1 when System Write Mode is ON */
-extern int g_safemode_applied;        /* set by main.c on L-trigger boot */
+extern int g_safemode_applied;
+extern char g_boot_notice[80];        /* one-line notice for the main menu (v1.1.6) */        /* set by main.c on L-trigger boot */
 void menu_draw(Menu *menu);
 void menu_handle_input(Menu **current, SceCtrlData *old_ctrl);

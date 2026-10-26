@@ -63,7 +63,8 @@ static int g_show_filemanager    = 0;
 static int g_show_plugin_fix     = 0;
 static int g_dev_unlock          = 0;   /* System Write Mode */
 static int g_show_diag           = 0;
-int g_safemode_applied = 0;   /* set by main.c if L-trigger safe mode ran */
+int g_safemode_applied = 0;
+char g_boot_notice[80] = "";   /* set by main.c if L-trigger safe mode ran */
 static int g_show_ri             = 0;
 static int g_exit_requested      = 0;
 static int g_show_ftp             = 0;
@@ -666,6 +667,13 @@ void menu_run(void) {
 
             /* Safe Mode boot banner — drawn after draw_menu so it overlays
              * the last content row rather than being wiped by display_clear */
+            if (g_boot_notice[0] && current == &g_main_menu) {
+                /* Sits above the Safe Mode banner if both are shown */
+                int ny = FOOTER_Y - LINE_H - 4 - (g_safemode_applied ? LINE_H + 4 : 0);
+                display_rect(0, ny, SCREEN_W, LINE_H + 4, RGBA8(0, 40, 60, 255));
+                display_hline(0, ny, SCREEN_W, COLOR_YELLOW);
+                display_text(MENU_X, ny + 8, COLOR_YELLOW, g_boot_notice);
+            }
             if (g_safemode_applied && current == &g_main_menu) {
                 display_rect(0, FOOTER_Y - LINE_H - 4, SCREEN_W, LINE_H + 4,
                              RGBA8(60, 30, 0, 255));

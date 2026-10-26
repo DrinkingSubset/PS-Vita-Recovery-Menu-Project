@@ -3,6 +3,15 @@
 By DrinkingSubset. Newest version first. Copy a version's block straight into
 the GitHub release notes.
 
+## v1.1.6
+- **Rebuild Database now works**, through the boot plugin. The app is a safe homebrew and can't see `ur0:shell`, so it now writes a request file (`ur0:tai/rebuild_db_trigger`). At the next boot, before the home screen starts, `boot_recovery.skprx` deletes `ur0:shell/db/app.db` and the system rebuilds it. The result appears as a notice on the main menu.
+  - Requires the **updated boot plugin**: reinstall it from Recovery Installer after updating. The screen tells you if the plugin is missing or older.
+  - A clear warning first: home screen **folders are removed and bubbles go back to the default order**. Games, apps and saves are not deleted. A second "Are you sure?" follows.
+  - If a rebuild is already scheduled, you can keep it or cancel it.
+  - Needs Enso (plugins loading at boot). On h-encore the plugin loads too late, so the delete is skipped and reported, never done while the home screen is using the database.
+- Sony Recovery: pressing O on a confirm screen goes straight back to the list. The confusing "SUCCESS / Cancelled" screen is gone. Closing a result screen with O no longer also closes the list.
+- Fixed the wide gaps in titles such as "Sony Recovery    Rebuild Database". A dash character the screen font can't draw is replaced with `-` in about 45 messages.
+
 ## v1.1.5
 - Fix: after "Save Changes" in the Plugins menu, the "Changes saved... reboot to apply" message closed straight away unless X was held down. The message, plus the Clean Config and Remove Duplicates screens, now waits until you let go of X and press a button.
 - **Safety fix:** a held X could skip confirmation screens. Clean Config, the Sony Recovery confirms (including the 3-step Format Memory Card and Restore System) and the Cheat Manager screens counted the X that opened them as a new press. Each screen now needs a fresh press.

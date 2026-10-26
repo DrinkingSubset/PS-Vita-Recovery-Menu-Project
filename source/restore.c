@@ -251,7 +251,7 @@ RestoreStatus restore_safe_mode(void) {
     }
     char msg[192];
     snprintf(msg, sizeof(msg),
-             "Safe Mode OK — %d config(s) patched. Reboot to apply.", patched);
+             "Safe Mode OK - %d config(s) patched. Reboot to apply.", patched);
     set_status(final_r, msg);
     log_close(); return final_r;
 }
@@ -339,7 +339,7 @@ RestoreStatus restore_backup_tai(void) {
     }
     char msg[192];
     snprintf(msg, sizeof(msg),
-             "Backup OK — %d file(s) from %d location(s) -> tai_backup/",
+             "Backup OK - %d file(s) from %d location(s) -> tai_backup/",
              total, sources);
     set_status(RESTORE_OK, msg);
     log_close(); return RESTORE_OK;
@@ -383,12 +383,12 @@ RestoreStatus restore_restore_tai(void) {
     }
 
     if (restored == 0) {
-        set_status(RESTORE_ERR_IO, "ERROR: Restore failed — no backup subdirs found.");
+        set_status(RESTORE_ERR_IO, "ERROR: Restore failed - no backup subdirs found.");
         log_close(); return RESTORE_ERR_IO;
     }
     char msg[192];
     snprintf(msg, sizeof(msg),
-             "Restore OK — %d file(s) to %d location(s). Reboot to apply.",
+             "Restore OK - %d file(s) to %d location(s). Reboot to apply.",
              total, restored);
     set_status(RESTORE_OK, msg);
     log_close(); return RESTORE_OK;
