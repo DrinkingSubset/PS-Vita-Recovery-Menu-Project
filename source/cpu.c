@@ -15,14 +15,16 @@
 #include "menu.h"
 
 /* ── Frequency tables ──────────────────────────────────────────────────── */
-const int CPU_ARM_FREQS[] = { 41, 83, 111, 166, 222, 333, 444, 500 };
-const int CPU_ARM_COUNT   = 8;
+/* v1.1.4: ARM 500 removed (the system caps it at 444) and BUS 166 removed
+ * (the system keeps the bus at 222). Only values the hardware applies. */
+const int CPU_ARM_FREQS[] = { 41, 83, 111, 166, 222, 333, 444 };
+const int CPU_ARM_COUNT   = 7;
 
 const int CPU_ES4_FREQS[] = { 41, 83, 111, 166, 222 };
 const int CPU_ES4_COUNT   = 5;
 
-const int CPU_BUS_FREQS[] = { 55, 83, 111, 166, 222 };
-const int CPU_BUS_COUNT   = 5;
+const int CPU_BUS_FREQS[] = { 55, 83, 111, 222 };
+const int CPU_BUS_COUNT   = 4;
 
 const int CPU_XBR_FREQS[] = { 83, 111, 166 };
 const int CPU_XBR_COUNT   = 3;
@@ -30,29 +32,25 @@ const int CPU_XBR_COUNT   = 3;
 /* ── Current indices ───────────────────────────────────────────────────── */
 int g_cpu_arm_idx = 5;   /* 333 MHz */
 int g_cpu_es4_idx = 4;   /* 222 MHz */
-int g_cpu_bus_idx = 4;   /* 222 MHz (stock) */
+int g_cpu_bus_idx = 3;   /* 222 MHz (stock) */
 int g_cpu_xbr_idx = 2;   /* 166 MHz */
+
+/* Index of the frequency in a table closest to mhz */
+static int nearest_idx(const int *t, int n, int mhz) {
+    int best = 0, diff = 1 << 30;
+    for (int i = 0; i < n; i++) {
+        int d = t[i] - mhz; if (d < 0) d = -d;
+        if (d < diff) { diff = d; best = i; }
+    }
+    return best;
+}
 
 /* ── Init ──────────────────────────────────────────────────────────────── */
 void cpu_init(void) {
-    int arm = scePowerGetArmClockFrequency();
-    int bus = scePowerGetBusClockFrequency();
-    int best, diff, d, i;
-
-    best = 0; diff = 9999;
-    for (i = 0; i < CPU_ARM_COUNT; i++) {
-        d = CPU_ARM_FREQS[i] - arm; if (d < 0) d = -d;
-        if (d < diff) { diff = d; best = i; }
-    }
-    g_cpu_arm_idx = best;
-
-    best = 0; diff = 9999;
-    for (i = 0; i < CPU_BUS_COUNT; i++) {
-        d = CPU_BUS_FREQS[i] - bus; if (d < 0) d = -d;
-        if (d < diff) { diff = d; best = i; }
-    }
-    g_cpu_bus_idx = best;
-
+    g_cpu_arm_idx = nearest_idx(CPU_ARM_FREQS, CPU_ARM_COUNT,
+                                scePowerGetArmClockFrequency());
+    g_cpu_bus_idx = nearest_idx(CPU_BUS_FREQS, CPU_BUS_COUNT,
+                                scePowerGetBusClockFrequency());
     g_cpu_es4_idx = CPU_ES4_COUNT - 1;
     g_cpu_xbr_idx = CPU_XBR_COUNT - 1;
 }
@@ -71,7 +69,7 @@ void cpu_apply(void) {
 void cpu_apply_default(void) {
     g_cpu_arm_idx = 5;   /* 333 */
     g_cpu_es4_idx = 4;   /* 222 */
-    g_cpu_bus_idx = 4;   /* 222 (stock) */
+    g_cpu_bus_idx = 3;   /* 222 (stock) */
     g_cpu_xbr_idx = 2;   /* 166 */
     cpu_apply();
 }
@@ -94,10 +92,13 @@ void cpu_save(void) {
     SceUID fd = sceIoOpen(CPU_SAVE_FILE,
                           SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
     if (fd < 0) return;
-    char buf[64];
-    int n = snprintf(buf, sizeof(buf), "arm=%d\nes4=%d\nbus=%d\nxbr=%d\n",
-                     g_cpu_arm_idx, g_cpu_es4_idx,
-                     g_cpu_bus_idx, g_cpu_xbr_idx);
+    /* v2 format stores MHz values, so future table changes cannot
+     * silently shift a saved setting to a different speed. */
+    char buf[96];
+    int n = snprintf(buf, sizeof(buf),
+                     "ver=2\narm=%d\nes4=%d\nbus=%d\nxbr=%d\n",
+                     CPU_ARM_FREQS[g_cpu_arm_idx], CPU_ES4_FREQS[g_cpu_es4_idx],
+                     CPU_BUS_FREQS[g_cpu_bus_idx], CPU_XBR_FREQS[g_cpu_xbr_idx]);
     sceIoWrite(fd, buf, n);
     sceIoClose(fd);
 }
@@ -110,16 +111,17 @@ void cpu_load_and_apply(void) {
         cpu_save();
         return;
     }
-    char buf[64];
+    char buf[96];
     int n = sceIoRead(fd, buf, sizeof(buf) - 1);
     sceIoClose(fd);
     if (n <= 0) return;
     buf[n] = '\0';
 
-    int arm = -1, es4 = -1, bus = -1, xbr = -1;
+    int ver = 1, arm = -1, es4 = -1, bus = -1, xbr = -1;
     char *p = buf;
     while (*p) {
-        if      (strncmp(p, "arm=", 4) == 0) arm = atoi(p + 4);
+        if      (strncmp(p, "ver=", 4) == 0) ver = atoi(p + 4);
+        else if (strncmp(p, "arm=", 4) == 0) arm = atoi(p + 4);
         else if (strncmp(p, "es4=", 4) == 0) es4 = atoi(p + 4);
         else if (strncmp(p, "bus=", 4) == 0) bus = atoi(p + 4);
         else if (strncmp(p, "xbr=", 4) == 0) xbr = atoi(p + 4);
@@ -127,17 +129,30 @@ void cpu_load_and_apply(void) {
         if (*p == '\n') p++;
     }
 
-    /* Older builds saved a wrong "default" (bus 166). Treat that exact
-     * combination as the stock default so the bus returns to 222. */
-    if (arm == 5 && es4 == 4 && bus == 3 && xbr == 2) bus = 4;
+    if (ver < 2) {
+        /* Old builds (v1.1.3 and earlier) saved INDICES into the old tables.
+         * Convert them to MHz first. */
+        static const int OLD_ARM[] = { 41, 83, 111, 166, 222, 333, 444, 500 };
+        static const int OLD_BUS[] = { 55, 83, 111, 166, 222 };
+        /* Older builds saved a wrong "default" (bus 166). Treat that exact
+         * combination as the stock default so the bus returns to 222. */
+        if (arm == 5 && es4 == 4 && bus == 3 && xbr == 2) bus = 4;
+        arm = (arm >= 0 && arm < 8) ? OLD_ARM[arm] : -1;
+        bus = (bus >= 0 && bus < 5) ? OLD_BUS[bus] : -1;
+        es4 = (es4 >= 0 && es4 < CPU_ES4_COUNT) ? CPU_ES4_FREQS[es4] : -1;
+        xbr = (xbr >= 0 && xbr < CPU_XBR_COUNT) ? CPU_XBR_FREQS[xbr] : -1;
+    }
 
-    /* Validate and clamp indices */
-    if (arm >= 0 && arm < CPU_ARM_COUNT) g_cpu_arm_idx = arm;
-    if (es4 >= 0 && es4 < CPU_ES4_COUNT) g_cpu_es4_idx = es4;
-    if (bus >= 0 && bus < CPU_BUS_COUNT) g_cpu_bus_idx = bus;
-    if (xbr >= 0 && xbr < CPU_XBR_COUNT) g_cpu_xbr_idx = xbr;
+    /* A saved 500 becomes 444; a saved bus 166 becomes 222 (what the
+     * hardware actually ran at). Other values snap to the nearest entry. */
+    if (bus == 166) bus = 222;
+    if (arm > 0) g_cpu_arm_idx = nearest_idx(CPU_ARM_FREQS, CPU_ARM_COUNT, arm);
+    if (es4 > 0) g_cpu_es4_idx = nearest_idx(CPU_ES4_FREQS, CPU_ES4_COUNT, es4);
+    if (bus > 0) g_cpu_bus_idx = nearest_idx(CPU_BUS_FREQS, CPU_BUS_COUNT, bus);
+    if (xbr > 0) g_cpu_xbr_idx = nearest_idx(CPU_XBR_FREQS, CPU_XBR_COUNT, xbr);
 
     cpu_apply();
+    if (ver < 2) cpu_save();   /* rewrite in the new format */
 }
 
 /* ── Live readback ─────────────────────────────────────────────────────── */
@@ -199,20 +214,17 @@ static void draw_clock_row(int base_x, int y, const char *label,
     display_text(base_x + ROW_INC_X, y,
                  can_inc ? btn_col : dim_col, ">");
 
-    /* Live readback — yellow when the hardware differs from the selection
-     * (ARM 500 legitimately reads back as 444). */
+    /* Live readback — yellow when the hardware differs from the selection */
     char live[24];
     snprintf(live, sizeof(live), "(live: %d MHz)", live_mhz);
     int dlt = live_mhz - sel_mhz; if (dlt < 0) dlt = -dlt;
-    int mismatch = (dlt > 2) && !(sel_mhz == 500 && live_mhz == 444);
+    int mismatch = (dlt > 2);
     display_text(base_x + ROW_LIVE_X, y, mismatch ? COLOR_YELLOW : dim_col, live);
 }
 
 /* ── Main CPU screen ───────────────────────────────────────────────────── */
 void cpu_screen_run(void) {
-    /* Indices are already set correctly by cpu_load_and_apply() at startup.
-     * Do NOT call cpu_init() here — it reads the hardware clock which caps
-     * at 444 and would incorrectly snap a 500MHz setting back to 444. */
+    /* Indices are already set by cpu_load_and_apply() at startup. */
     SceCtrlData old, ctrl;
     memset(&old, 0, sizeof(old));
     drain(&old);
@@ -228,8 +240,7 @@ void cpu_screen_run(void) {
                                &g_cpu_bus_idx, &g_cpu_xbr_idx };
 
     while (1) {
-        /* Real hardware readback, the same source System Info uses.
-         * (scePowerGet* reports 444 when ARM is set to 500.) */
+        /* Real hardware readback, the same source System Info uses. */
         int gpu_live = scePowerGetGpuClockFrequency();
         if (gpu_live <= 0) gpu_live = scePowerGetGpuXbarClockFrequency();
         int live[4] = {
@@ -351,7 +362,7 @@ static const CpuPreset g_presets[] = {
     { "Max (444 MHz / 222 MHz)",     444, 222 },
     { "Medium (222 MHz / 111 MHz)",  222, 111 },
     { "Low (111 MHz / 55 MHz)",      111,  55 },
-    { "PowerSave (41 MHz / 20 MHz)",  41,  20 },
+    { "PowerSave (41 MHz / 55 MHz)",  41,  55 },
 };
 static const int g_preset_count = 5;
 static int g_current_preset = 0;

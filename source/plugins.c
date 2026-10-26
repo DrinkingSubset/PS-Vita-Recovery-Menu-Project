@@ -21,21 +21,30 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <ctype.h>
 #include "plugins.h"
 #include "compat.h"
 
-#define MAX_PLUGINS  64
 #define MAX_LINE     256
+#define MAX_CFG_SIZE (512 * 1024)
 
+/* v1.1.4: one entry per (section, plugin path). The old code merged every
+ * line with the same FILE NAME across all sections into one entry, and the
+ * save then DELETED the later lines (for example henkaku.suprx under
+ * *NPXS10015 / *NPXS10016). Now each section keeps its own lines, and save
+ * only flips the '#' on lines whose state really changed. */
 typedef struct {
     char path[MAX_LINE];
-    int  enabled;
+    int  enabled;     /* 1 if any matching line is uncommented */
     int  essential;   /* 1 = protected, cannot be toggled */
     char section[64];
 } PluginEntry;
 
 static PluginEntry g_plugins[MAX_PLUGINS];
 static int         g_plugin_count = 0;
+static int         g_last_err     = 0;   /* detail code of the last failure */
+static int         g_backup_done  = 0;   /* .bak written once per app run */
 
 /* ── File helpers ────────────────────────────────────────────────────────── */
 
@@ -51,37 +60,100 @@ static int is_essential_plugin(const char *path) {
     const char *name = basename_of(path);
     /* henkaku.suprx is required in *main, *NPXS10015, *NPXS10016 for
      * HENkaku to function. henkaku.skprx is hard-coded by taiHEN itself. */
-    if (strcmp(name, "henkaku.suprx") == 0) return 1;
-    if (strcmp(name, "henkaku.skprx") == 0) return 1;
+    if (strcasecmp(name, "henkaku.suprx") == 0) return 1;
+    if (strcasecmp(name, "henkaku.skprx") == 0) return 1;
     /* storagemgr.skprx / gamesd.skprx redirect ux0: to the SD card adapter.
      * Disabling either causes ux0: to go missing on next boot, which on
      * SD2Vita systems means the system can no longer find any apps at all. */
-    if (strcmp(name, "storagemgr.skprx") == 0) return 1;
-    if (strcmp(name, "gamesd.skprx")     == 0) return 1;
+    if (strcasecmp(name, "storagemgr.skprx") == 0) return 1;
+    if (strcasecmp(name, "gamesd.skprx")     == 0) return 1;
     return 0;
 }
 
 static char *read_file_alloc(const char *path, int *out_len) {
     SceUID fd = sceIoOpen(path, SCE_O_RDONLY, 0);
-    if (fd < 0) return NULL;
+    if (fd < 0) { g_last_err = fd; return NULL; }
     /* sceIoGetstatByFd is broken on some FW — use sceIoLseek instead */
     int size = (int)sceIoLseek(fd, 0, SCE_SEEK_END);
     sceIoLseek(fd, 0, SCE_SEEK_SET);
-    if (size <= 0 || size > 512 * 1024) { sceIoClose(fd); return NULL; }
+    if (size < 0 || size > MAX_CFG_SIZE) {
+        sceIoClose(fd); g_last_err = size < 0 ? size : -1; return NULL;
+    }
     char *buf = malloc(size + 1);
-    if (!buf) { sceIoClose(fd); return NULL; }
-    sceIoRead(fd, buf, size);
+    if (!buf) { sceIoClose(fd); g_last_err = -2; return NULL; }
+    int rd = 0;
+    while (rd < size) {
+        int r = sceIoRead(fd, buf + rd, size - rd);
+        if (r <= 0) break;
+        rd += r;
+    }
     sceIoClose(fd);
+    if (rd != size) { free(buf); g_last_err = -3; return NULL; }
     buf[size] = '\0';
     if (out_len) *out_len = size;
     return buf;
 }
 
-static int write_file(const char *path, const char *data, int len) {
+static int write_all(const char *path, const char *data, int len) {
     SceUID fd = sceIoOpen(path, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
-    if (fd < 0) return -1;
-    sceIoWrite(fd, data, len);
+    if (fd < 0) return fd;
+    int done = 0;
+    while (done < len) {
+        int w = sceIoWrite(fd, data + done, len - done);
+        if (w <= 0) { sceIoClose(fd); return w < 0 ? w : -1; }
+        done += w;
+    }
     sceIoClose(fd);
+    return 0;
+}
+
+/* 1 if the file at path has exactly this content */
+static int file_matches(const char *path, const char *data, int len) {
+    int rl = 0;
+    char *back = read_file_alloc(path, &rl);
+    if (!back) return 0;
+    int same = (rl == len) && memcmp(back, data, len) == 0;
+    free(back);
+    return same;
+}
+
+/* Safe config write:
+ *   1. first write of this run: copy the untouched original to <path>.bak
+ *   2. write <path>.tmp and read it back to verify
+ *   3. replace the config with the .tmp (direct write as fallback)
+ *   4. read the config back and compare
+ * Returns 0 on success, negative on failure (detail in g_last_err). */
+static int safe_write_config(const char *path,
+                             const char *original, int orig_len,
+                             const char *data, int len) {
+    char aux[300];
+    if (!g_backup_done && original) {
+        snprintf(aux, sizeof(aux), "%s.bak", path);
+        int r = write_all(aux, original, orig_len);
+        if (r < 0 || !file_matches(aux, original, orig_len)) {
+            g_last_err = r < 0 ? r : -10;
+            return -1;          /* no backup = no change to the config */
+        }
+        g_backup_done = 1;
+    }
+
+    snprintf(aux, sizeof(aux), "%s.tmp", path);
+    int r = write_all(aux, data, len);
+    if (r < 0 || !file_matches(aux, data, len)) {
+        sceIoRemove(aux);
+        g_last_err = r < 0 ? r : -11;
+        return -1;              /* config untouched */
+    }
+
+    sceIoRemove(path);
+    if (sceIoRename(aux, path) < 0) {
+        /* Rename refused: write the config directly (backup exists) */
+        r = write_all(path, data, len);
+        sceIoRemove(aux);
+        if (r < 0) { g_last_err = r; return -1; }
+    }
+
+    if (!file_matches(path, data, len)) { g_last_err = -12; return -1; }
     return 0;
 }
 
@@ -93,16 +165,93 @@ static const char *get_active_config(void) {
     return g_compat.active_tai_config;
 }
 
+/* Case-insensitive substring test (strcasestr is not in every newlib) */
+static int strcasestr_simple(const char *hay, const char *needle) {
+    size_t nl = strlen(needle);
+    for (; *hay; hay++)
+        if (strncasecmp(hay, needle, nl) == 0) return 1;
+    return 0;
+}
 
 /* Returns true for lines that are plugin paths (.skprx or .suprx) */
 static int is_plugin_line(const char *line) {
     if (!strstr(line, "0:")) return 0;
-    if (!strstr(line, ".skprx") && !strstr(line, ".suprx")) return 0;
+    if (!strcasestr_simple(line, ".skprx") && !strcasestr_simple(line, ".suprx")) return 0;
     return 1;
 }
 
-/* ── Public API ──────────────────────────────────────────────────────────── */
+/* ── Line parsing (shared by load / save / dedup) ───────────────────────── */
 
+typedef struct {
+    char *start;        /* line text (not NUL-terminated in the buffer) */
+    int   len;          /* length without the newline and without '\r' */
+    int   has_cr;       /* line ended in \r\n */
+    int   has_nl;       /* line ended in \n (last line may not) */
+    int   is_section;   /* "*NAME" line */
+    int   is_plugin;    /* plugin path line (commented or not) */
+    int   commented;
+    char  path[MAX_LINE];   /* plugin path, trimmed */
+    char  section[64];      /* section this line belongs to */
+} CfgLine;
+
+/* Split buf into lines. Returns a malloc'd array (caller frees) */
+static CfgLine *parse_lines(char *buf, int len, int *out_count) {
+    int cap = 1;
+    for (int i = 0; i < len; i++) if (buf[i] == '\n') cap++;
+    CfgLine *L = calloc(cap, sizeof(CfgLine));
+    if (!L) { g_last_err = -2; return NULL; }
+
+    int n = 0;
+    char section[64] = "";
+    char *p = buf, *end = buf + len;
+    while (p < end && n < cap) {
+        char *nl = memchr(p, '\n', end - p);
+        char *le = nl ? nl : end;
+        CfgLine *c = &L[n++];
+        c->start  = p;
+        c->has_nl = (nl != NULL);
+        c->len    = (int)(le - p);
+        if (c->len > 0 && p[c->len - 1] == '\r') { c->has_cr = 1; c->len--; }
+
+        /* Work on a trimmed copy */
+        char tmp[MAX_LINE * 2];
+        int tl = c->len < (int)sizeof(tmp) - 1 ? c->len : (int)sizeof(tmp) - 1;
+        memcpy(tmp, p, tl); tmp[tl] = '\0';
+        char *t = tmp;
+        while (*t == ' ' || *t == '\t') t++;
+
+        if (*t == '*') {
+            c->is_section = 1;
+            char *sname = t + 1;
+            int sl = strlen(sname);
+            while (sl > 0 && (sname[sl-1] == ' ' || sname[sl-1] == '\t')) sname[--sl] = '\0';
+            snprintf(section, sizeof(section), "%s", sname);
+        } else {
+            if (*t == '#') { c->commented = 1; t++; while (*t == '#' || *t == ' ' || *t == '\t') t++; }
+            int pl = strlen(t);
+            while (pl > 0 && (t[pl-1] == ' ' || t[pl-1] == '\t')) t[--pl] = '\0';
+            if (pl > 0 && pl < MAX_LINE && is_plugin_line(t)) {
+                c->is_plugin = 1;
+                memcpy(c->path, t, pl + 1);   /* pl < MAX_LINE checked above */
+            }
+        }
+        snprintf(c->section, sizeof(c->section), "%s", section);
+        p = nl ? nl + 1 : end;
+    }
+    *out_count = n;
+    return L;
+}
+
+/* Append helper for building output */
+static void out_put(char *out, int *pos, const char *s, int n) {
+    memcpy(out + *pos, s, n); *pos += n;
+}
+static void out_eol(char *out, int *pos, const CfgLine *c) {
+    if (c->has_cr) out[(*pos)++] = '\r';
+    if (c->has_nl) out[(*pos)++] = '\n';
+}
+
+/* ── Public API ──────────────────────────────────────────────────────────── */
 
 /* Returns 1 if the file at this Vita path actually exists on disk */
 static int file_exists_on_vita(const char *path) {
@@ -110,85 +259,44 @@ static int file_exists_on_vita(const char *path) {
     return (sceIoGetstat(path, &st) >= 0) ? 1 : 0;
 }
 
-/* Find index of existing entry with same filename, -1 if none */
-static int find_same_filename(const char *path) {
-    const char *name = basename_of(path);
-    for (int i = 0; i < g_plugin_count; i++) {
-        if (strcmp(basename_of(g_plugins[i].path), name) == 0)
+static int find_entry(const char *section, const char *path) {
+    for (int i = 0; i < g_plugin_count; i++)
+        if (strcmp(g_plugins[i].section, section) == 0 &&
+            strcasecmp(g_plugins[i].path, path) == 0)
             return i;
-    }
     return -1;
 }
 
 int plugins_load(void) {
     g_plugin_count = 0;
+    g_last_err = 0;
     const char *config_path = get_active_config();
-    if (!config_path) return -1;
+    if (!config_path) { g_last_err = -20; return -1; }
 
     int len;
     char *buf = read_file_alloc(config_path, &len);
     if (!buf) return -1;
 
-    char current_section[64] = "";
-    char *line = strtok(buf, "\n");
-    while (line && g_plugin_count < MAX_PLUGINS) {
-        int ll = strlen(line);
-        if (ll > 0 && line[ll-1] == '\r') line[--ll] = '\0';
-        if (ll == 0) { line = strtok(NULL, "\n"); continue; }
+    int n = 0;
+    CfgLine *L = parse_lines(buf, len, &n);
+    if (!L) { free(buf); return -1; }
 
-        if (line[0] == '*') {
-            snprintf(current_section, sizeof(current_section), "%s", line + 1);
-        } else {
-            int commented  = (line[0] == '#');
-            char *raw_line = commented ? line + 1 : line;
-            while (*raw_line == ' ' || *raw_line == '\t') raw_line++;
-            if (is_plugin_line(raw_line)) {
-                int existing = find_same_filename(raw_line);
-                if (existing < 0) {
-                    /* No duplicate — just add it */
-                    PluginEntry *e = &g_plugins[g_plugin_count++];
-                    snprintf(e->path,    sizeof(e->path),    "%s", raw_line);
-                    snprintf(e->section, sizeof(e->section), "%s", current_section);
-                    e->essential = is_essential_plugin(raw_line);
-                    /* Essential plugins are always ON regardless of config state */
-                    e->enabled = e->essential ? 1 : !commented;
-                } else {
-                    /* Duplicate filename found — decide which entry to keep:
-                     * Rule 1: Keep whichever path actually exists on disk.
-                     * Rule 2: If both exist, keep the enabled (uncommented) one.
-                     * Rule 3: If both enabled, keep ur0: path (AutoPlugin2 canonical).
-                     * We update the existing entry in-place if the new one is better. */
-                    PluginEntry *e = &g_plugins[existing];
-                    int old_exists = file_exists_on_vita(e->path);
-                    int new_exists = file_exists_on_vita(raw_line);
-
-                    if (!old_exists && new_exists) {
-                        /* New path actually has the file — replace */
-                        snprintf(e->path,    sizeof(e->path),    "%s", raw_line);
-                        snprintf(e->section, sizeof(e->section), "%s", current_section);
-                        e->enabled = !commented;
-                    } else if (old_exists && !new_exists) {
-                        /* Old path has the file — keep old, discard new (do nothing) */
-                    } else if (!commented && !e->enabled) {
-                        /* Both exist (or neither): new is enabled, old is disabled
-                         * — the enabled one is the real one */
-                        snprintf(e->path,    sizeof(e->path),    "%s", raw_line);
-                        snprintf(e->section, sizeof(e->section), "%s", current_section);
-                        e->enabled = 1;
-                    } else if (strncmp(raw_line, "ur0:", 4) == 0 &&
-                               strncmp(e->path,  "ur0:", 4) != 0) {
-                        /* Both exist and same enabled state:
-                         * prefer ur0: (AutoPlugin2 canonical location) */
-                        snprintf(e->path,    sizeof(e->path),    "%s", raw_line);
-                        snprintf(e->section, sizeof(e->section), "%s", current_section);
-                        e->enabled = !commented;
-                    }
-                    /* Otherwise keep existing entry as-is */
-                }
-            }
+    for (int i = 0; i < n && g_plugin_count < MAX_PLUGINS; i++) {
+        CfgLine *c = &L[i];
+        if (!c->is_plugin) continue;
+        int e = find_entry(c->section, c->path);
+        if (e >= 0) {
+            /* Same plugin listed twice in the same section: one entry */
+            if (!c->commented) g_plugins[e].enabled = 1;
+            continue;
         }
-        line = strtok(NULL, "\n");
+        PluginEntry *pe = &g_plugins[g_plugin_count++];
+        snprintf(pe->path,    sizeof(pe->path),    "%s", c->path);
+        snprintf(pe->section, sizeof(pe->section), "%s", c->section);
+        pe->essential = is_essential_plugin(c->path);
+        pe->enabled   = !c->commented;   /* real state, also for essentials */
     }
+    free(L);
     free(buf);
     return g_plugin_count;
 }
@@ -198,11 +306,16 @@ int         plugins_is_enabled(int idx)      { return (idx >= 0 && idx < g_plugi
 int         plugins_is_essential(int idx)    { return (idx >= 0 && idx < g_plugin_count) ? g_plugins[idx].essential : 0; }
 void        plugins_toggle(int idx)          { if (idx >= 0 && idx < g_plugin_count && !g_plugins[idx].essential) g_plugins[idx].enabled ^= 1; }
 const char *plugins_get_config_path(void)    { const char *p = get_active_config(); return p ? p : "(no config found)"; }
+int         plugins_last_error(void)         { return g_last_err; }
 
 const char *plugins_get_name(int idx) {
     if (idx < 0 || idx >= g_plugin_count) return "???";
-    const char *p = strrchr(g_plugins[idx].path, '/');
-    return p ? p + 1 : g_plugins[idx].path;
+    return basename_of(g_plugins[idx].path);
+}
+
+const char *plugins_get_path(int idx) {
+    if (idx < 0 || idx >= g_plugin_count) return "";
+    return g_plugins[idx].path;
 }
 
 const char *plugins_get_section(int idx) {
@@ -213,217 +326,145 @@ const char *plugins_get_section(int idx) {
 /*
  * plugins_save — Write plugin toggle state back to the ACTIVE config file.
  * On PCH-2000 with imc0: active, this correctly edits imc0:tai/config.txt.
+ *
+ * Every line is copied unchanged except plugin lines whose on/off state
+ * differs from the menu: those get a '#' added or removed. No line is ever
+ * dropped. Returns 0 on success (also when nothing changed), -1 on error.
  */
 int plugins_save(void) {
+    g_last_err = 0;
     const char *config_path = get_active_config();
-    if (!config_path) return -1;
+    if (!config_path) { g_last_err = -20; return -1; }
 
     int len;
     char *original = read_file_alloc(config_path, &len);
     if (!original) return -1;
 
-    char *out = malloc(len + MAX_PLUGINS * 2 + 64);
-    if (!out) { free(original); return -1; }
-    int out_pos = 0;
+    char *work = malloc(len + 1);
+    if (!work) { free(original); g_last_err = -2; return -1; }
+    memcpy(work, original, len + 1);
 
-    /* Track which g_plugins entries have been written to avoid duplicates */
-    int written[MAX_PLUGINS];
-    for (int i = 0; i < MAX_PLUGINS; i++) written[i] = 0;
+    int n = 0;
+    CfgLine *L = parse_lines(work, len, &n);
+    if (!L) { free(work); free(original); return -1; }
 
-    char *line = strtok(original, "\n");
-    while (line) {
-        int ll = strlen(line);
-        if (ll > 0 && line[ll-1] == '\r') line[--ll] = '\0';
+    /* Worst case each line gains one '#' */
+    char *out = malloc(len + n + 16);
+    if (!out) { free(L); free(work); free(original); g_last_err = -2; return -1; }
+    int pos = 0;
 
-        int commented  = (line[0] == '#');
-        char *raw_line = commented ? line + 1 : line;
-        while (*raw_line == ' ' || *raw_line == '\t') raw_line++;
-
-        int handled = 0;
-        if (is_plugin_line(raw_line)) {
-            /* Match by basename — same logic as plugins_load() deduplication.
-             * If two lines share a basename, only the FIRST match in g_plugins
-             * will have the toggled state; subsequent duplicates are dropped
-             * (written as blank — i.e. skip them entirely to clean up). */
-            const char *raw_name = basename_of(raw_line);
-            int matched_idx = -1;
-            for (int i = 0; i < g_plugin_count; i++) {
-                if (strcmp(basename_of(g_plugins[i].path), raw_name) == 0) {
-                    matched_idx = i;
-                    break;
-                }
+    for (int i = 0; i < n; i++) {
+        CfgLine *c = &L[i];
+        int e = c->is_plugin ? find_entry(c->section, c->path) : -1;
+        if (e >= 0 && !g_plugins[e].essential &&
+            g_plugins[e].enabled == c->commented) {
+            if (g_plugins[e].enabled) {
+                /* enable: write just the path (drops '#' and spacing) */
+                out_put(out, &pos, c->path, strlen(c->path));
+            } else {
+                /* disable: '#' in front of the original text */
+                out[pos++] = '#';
+                out_put(out, &pos, c->start, c->len);
             }
-            if (matched_idx >= 0 && !written[matched_idx]) {
-                PluginEntry *e = &g_plugins[matched_idx];
-                /* Write the canonical path we loaded (may differ from raw_line
-                 * if dedup chose a different path, e.g. ur0: over ux0:) */
-                if (!e->enabled && !e->essential) out[out_pos++] = '#';
-                int pl = strlen(e->path);
-                memcpy(out + out_pos, e->path, pl);
-                out_pos += pl;
-                out[out_pos++] = '\n';
-                written[matched_idx] = 1;
-                handled = 1;
-            } else if (matched_idx >= 0 && written[matched_idx]) {
-                /* Duplicate line — already written this plugin, drop it */
-                handled = 1;
-            }
+        } else {
+            out_put(out, &pos, c->start, c->len);
         }
-        if (!handled) {
-            memcpy(out + out_pos, line, ll);
-            out_pos += ll;
-            out[out_pos++] = '\n';
-        }
-        line = strtok(NULL, "\n");
+        out_eol(out, &pos, c);
     }
-    out[out_pos] = '\0';
-    int r = write_file(config_path, out, out_pos);
-    free(out);
-    free(original);
+
+    int r = 0;
+    if (pos != len || memcmp(out, original, len) != 0)
+        r = safe_write_config(config_path, original, len, out, pos);
+
+    free(out); free(L); free(work); free(original);
     return r;
 }
 
 /*
- * plugins_remove_duplicates — Rewrites config.txt keeping only the REAL
- * occurrence of each plugin, determined by:
+ * plugins_remove_duplicates — Removes lines that list the same plugin file
+ * twice inside the SAME section. Lines in different sections are never
+ * duplicates (a plugin can legitimately load in *main and *NPXS10015).
+ * Which line is kept:
  *   1. The path that actually exists on disk (file_exists_on_vita)
  *   2. If both/neither exist: the enabled (uncommented) one
  *   3. If both enabled: the ur0: path (AutoPlugin2 canonical)
+ *   4. Otherwise the first one
  * Returns number of duplicates removed, or -1 on error.
  */
 int plugins_remove_duplicates(void) {
+    g_last_err = 0;
     const char *config_path = get_active_config();
-    if (!config_path) return -1;
+    if (!config_path) { g_last_err = -20; return -1; }
 
     int len;
     char *original = read_file_alloc(config_path, &len);
     if (!original) return -1;
+    char *work = malloc(len + 1);
+    if (!work) { free(original); g_last_err = -2; return -1; }
+    memcpy(work, original, len + 1);
 
-    /* --- Pass 1: For each filename, decide which path is the real one --- */
-    typedef struct { char keep[MAX_LINE]; char drop[MAX_LINE]; } DupPair;
-    DupPair pairs[MAX_PLUGINS];
-    int pair_count = 0;
+    int n = 0;
+    CfgLine *L = parse_lines(work, len, &n);
+    if (!L) { free(work); free(original); return -1; }
 
-    /* Re-parse to collect all entries grouped by filename */
-    typedef struct { char path[MAX_LINE]; int enabled; } RawEntry;
-    RawEntry raw[MAX_PLUGINS * 2];
-    int raw_count = 0;
-    char *buf2 = malloc(len + 1);
-    if (!buf2) { free(original); return -1; }
-    memcpy(buf2, original, len + 1);
-
-    char *line = strtok(buf2, "\n");
-    while (line && raw_count < MAX_PLUGINS * 2) {
-        int ll = strlen(line);
-        if (ll > 0 && line[ll-1] == '\r') line[--ll] = '\0';
-        int commented = (ll > 0 && line[0] == '#');
-        char *rl = commented ? line + 1 : line;
-        while (*rl == ' ' || *rl == '\t') rl++;
-        if (is_plugin_line(rl)) {
-            snprintf(raw[raw_count].path, MAX_LINE, "%s", rl);
-            raw[raw_count].enabled = !commented;
-            raw_count++;
-        }
-        line = strtok(NULL, "\n");
+    char *drop   = calloc(n ? n : 1, 1);
+    int  *exists = malloc(sizeof(int) * (n ? n : 1));
+    if (!drop || !exists) {
+        free(drop); free(exists); free(L); free(work); free(original);
+        g_last_err = -2; return -1;
     }
-    free(buf2);
+    for (int i = 0; i < n; i++)
+        exists[i] = L[i].is_plugin ? file_exists_on_vita(L[i].path) : 0;
 
-    /* Find pairs with same filename */
-    char checked[MAX_PLUGINS][64];
-    int checked_count = 0;
-    for (int i = 0; i < raw_count; i++) {
-        const char *name = basename_of(raw[i].path);
-        /* Already processed this filename? */
-        int already = 0;
-        for (int c = 0; c < checked_count; c++)
-            if (strcmp(checked[c], name) == 0) { already = 1; break; }
-        if (already) continue;
-        snprintf(checked[checked_count++], 64, "%s", name);
-
-        /* Find all entries with this filename */
-        int matches[8], mc = 0;
-        for (int j = i; j < raw_count && mc < 8; j++)
-            if (strcmp(basename_of(raw[j].path), name) == 0)
-                matches[mc++] = j;
-        if (mc < 2) continue; /* no duplicate */
-
-        /* Pick the best one using the rules */
-        int best = matches[0];
-        for (int m = 1; m < mc; m++) {
-            int bi = best, ci = matches[m];
-            int b_exists = file_exists_on_vita(raw[bi].path);
-            int c_exists = file_exists_on_vita(raw[ci].path);
-            if (!b_exists && c_exists) { best = ci; continue; }
-            if (b_exists && !c_exists) continue;
-            /* Both or neither exist — use enabled state */
-            if (!raw[bi].enabled && raw[ci].enabled) { best = ci; continue; }
-            if (raw[bi].enabled && !raw[ci].enabled) continue;
-            /* Both same state — prefer ur0: */
-            if (strncmp(raw[ci].path, "ur0:", 4) == 0 &&
-                strncmp(raw[bi].path, "ur0:", 4) != 0) { best = ci; }
-        }
-        /* All non-best matches go into drop list */
-        for (int m = 0; m < mc && pair_count < MAX_PLUGINS; m++) {
-            if (matches[m] != best) {
-                snprintf(pairs[pair_count].keep, MAX_LINE, "%s", raw[best].path);
-                snprintf(pairs[pair_count].drop, MAX_LINE, "%s", raw[matches[m]].path);
-                pair_count++;
-            }
-        }
-    }
-
-    if (pair_count == 0) { free(original); return 0; }
-
-    /* --- Pass 2: Rewrite config dropping the identified duplicates --- */
-    char *out = malloc(len + 4);
-    if (!out) { free(original); return -1; }
-    int out_pos = 0;
     int removed = 0;
+    for (int i = 0; i < n; i++) {
+        if (!L[i].is_plugin || drop[i]) continue;
+        int best = i;
+        for (int j = i + 1; j < n; j++) {
+            if (!L[j].is_plugin || drop[j]) continue;
+            if (strcmp(L[j].section, L[i].section) != 0) continue;
+            if (strcasecmp(basename_of(L[j].path), basename_of(L[i].path)) != 0) continue;
 
-    /* Need a fresh copy since strtok destroyed original */
-    char *orig2 = malloc(len + 1);
-    if (!orig2) { free(out); free(original); return -1; }
-    memcpy(orig2, original, len + 1);
-
-    line = strtok(orig2, "\n");
-    while (line) {
-        int ll = strlen(line);
-        if (ll > 0 && line[ll-1] == '\r') line[--ll] = '\0';
-        int commented = (ll > 0 && line[0] == '#');
-        char *rl = commented ? line + 1 : line;
-        while (*rl == ' ' || *rl == '\t') rl++;
-
-        int skip = 0;
-        if (is_plugin_line(rl)) {
-            for (int p = 0; p < pair_count; p++) {
-                if (strcmp(rl, pairs[p].drop) == 0) {
-                    skip = 1;
-                    removed++;
-                    break;
-                }
+            /* j duplicates best — decide which survives */
+            int keep_j = 0;
+            if (!exists[best] && exists[j]) keep_j = 1;
+            else if (exists[best] == exists[j]) {
+                if (L[best].commented && !L[j].commented) keep_j = 1;
+                else if (L[best].commented == L[j].commented &&
+                         strncasecmp(L[j].path, "ur0:", 4) == 0 &&
+                         strncasecmp(L[best].path, "ur0:", 4) != 0) keep_j = 1;
             }
+            if (keep_j) { drop[best] = 1; best = j; }
+            else        { drop[j] = 1; }
+            removed++;
         }
-        if (!skip) {
-            memcpy(out + out_pos, line, ll);
-            out_pos += ll;
-            out[out_pos++] = '\n';
-        }
-        line = strtok(NULL, "\n");
     }
-    out[out_pos] = '\0';
-    free(orig2);
-    free(original);
 
-    if (removed > 0)
-        write_file(config_path, out, out_pos);
-    free(out);
-    return removed;
+    int r = 0;
+    if (removed > 0) {
+        char *out = malloc(len + 4);
+        if (!out) r = -1, g_last_err = -2;
+        else {
+            int pos = 0;
+            for (int i = 0; i < n; i++) {
+                if (drop[i]) continue;
+                out_put(out, &pos, L[i].start, L[i].len);
+                out_eol(out, &pos, &L[i]);
+            }
+            r = safe_write_config(config_path, original, len, out, pos);
+            free(out);
+        }
+    }
+
+    free(drop); free(exists); free(L); free(work); free(original);
+    return r < 0 ? -1 : removed;
 }
 
 /*
  * plugins_clean_config — Full config repair:
  *   1. Reads every plugin entry (including commented ones)
- *   2. Deduplicates by filename using file-existence rules
+ *   2. Deduplicates by filename WITHIN each section (v1.1.4: never across
+ *      sections) using file-existence rules
  *   3. Re-enables any plugin whose file actually exists on disk
  *   4. Writes a clean config.txt preserving section structure
  *
@@ -433,8 +474,9 @@ int plugins_remove_duplicates(void) {
  * Returns: number of changes made (deduped + re-enabled), or -1 on error.
  */
 int plugins_clean_config(void) {
+    g_last_err = 0;
     const char *config_path = get_active_config();
-    if (!config_path) return -1;
+    if (!config_path) { g_last_err = -20; return -1; }
 
     int len;
     char *original = read_file_alloc(config_path, &len);
@@ -448,10 +490,13 @@ int plugins_clean_config(void) {
         int  file_exists;    /* does the file actually exist on disk? */
     } CleanEntry;
 
-    CleanEntry entries[MAX_PLUGINS * 2];
+    #define CLEAN_MAX_ENTRIES (MAX_PLUGINS * 2)
+    #define CLEAN_MAX_SECTIONS 64
+    static CleanEntry entries[CLEAN_MAX_ENTRIES];
     int entry_count = 0;
-    char section_order[16][64];
+    static char section_order[CLEAN_MAX_SECTIONS][64];
     int  section_count = 0;
+    int  overflow = 0;   /* too many entries/sections: refuse to rewrite */
 
     char *buf = malloc(len + 1);
     if (!buf) { free(original); return -1; }
@@ -472,21 +517,30 @@ int plugins_clean_config(void) {
             int found = 0;
             for (int i = 0; i < section_count; i++)
                 if (strcmp(section_order[i], current_section) == 0) { found = 1; break; }
-            if (!found && section_count < 16)
-                snprintf(section_order[section_count++], 64, "%s", current_section);
+            if (!found) {
+                if (section_count < CLEAN_MAX_SECTIONS)
+                    snprintf(section_order[section_count++], 64, "%s", current_section);
+                else
+                    overflow = 1;
+            }
         } else if (current_section[0]) {
             int commented = (stripped[0] == '#');
             char *raw = commented ? stripped + 1 : stripped;
             while (*raw == ' ' || *raw == '\t') raw++;
 
+            int rl = strlen(raw);
+            while (rl > 0 && (raw[rl-1] == ' ' || raw[rl-1] == '\t')) raw[--rl] = '\0';
             if (is_plugin_line(raw)) {
                 const char *name = basename_of(raw);
-                /* Check for existing entry with same filename */
+                /* Duplicate = same filename in the SAME section only */
                 int existing = -1;
                 for (int i = 0; i < entry_count; i++)
-                    if (strcmp(basename_of(entries[i].path), name) == 0) { existing = i; break; }
+                    if (strcmp(entries[i].section, current_section) == 0 &&
+                        strcasecmp(basename_of(entries[i].path), name) == 0) { existing = i; break; }
 
-                if (existing < 0 && entry_count < MAX_PLUGINS * 2) {
+                if (existing < 0 && entry_count >= CLEAN_MAX_ENTRIES) {
+                    overflow = 1;
+                } else if (existing < 0) {
                     /* New entry */
                     snprintf(entries[entry_count].path,    MAX_LINE, "%s", raw);
                     snprintf(entries[entry_count].section, 64,       "%s", current_section);
@@ -521,6 +575,13 @@ int plugins_clean_config(void) {
         line = strtok(NULL, "\n");
     }
     free(buf);
+
+    if (overflow) {
+        /* Rewriting would lose plugin lines; leave the config alone */
+        free(original);
+        g_last_err = -30;
+        return -1;
+    }
 
     /* --- Pass 2: Re-enable plugins whose file exists on disk --- */
     int changes = 0;
@@ -573,10 +634,10 @@ int plugins_clean_config(void) {
     }
     out[out_pos] = '\0';
 
-    write_file(config_path, out, out_pos);
+    int wr = safe_write_config(config_path, original, len, out, out_pos);
     free(out);
     free(original);
-    return changes;
+    return wr < 0 ? -1 : changes;
 }
 
 /*

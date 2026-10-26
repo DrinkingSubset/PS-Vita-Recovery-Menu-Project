@@ -3,6 +3,16 @@
 By DrinkingSubset. Newest version first. Copy a version's block straight into
 the GitHub release notes.
 
+## v1.1.4
+- **Plugin toggles now really work.** In the Plugins menu, turning a plugin on or off changed a *different* plugin in config.txt whenever a section header (like `*KERNEL` or `*main`) was above it. The menu showed the change, but the config didn't get it. Each row now maps to the right plugin.
+- Plugin changes now **save immediately** (like AutoPlugin2). If the save fails, the switch flips back and the error code is shown. Reboot to apply.
+- **Saving no longer deletes plugin lines.** Before, a plugin listed in more than one section (for example `henkaku.suprx` under `*main`, `*NPXS10015` and `*NPXS10016`) was treated as one "duplicate", and saving deleted the other lines. Each section now keeps its own lines, and only the `#` of a changed line is touched. Blank lines, comments and line endings are kept as they were.
+- Safer config writes: the first change in each session copies the original to `config.txt.bak`. Every save goes through a temporary file that is read back and checked before it replaces the config.
+- "Remove Duplicates" and "Clean Config" only treat lines as duplicates inside the **same section**. Clean Config refuses to run, rather than drop lines, if the config is unusually large.
+- Plugin Fix Mode: "Reset Config" now saves the old config as `config.txt.before_reset` first. Protected plugins (henkaku, storagemgr, gamesd) show their real ON/OFF state.
+- **CPU Speed:** removed ARM 500 MHz (the system rejects it with error 0x802B0000 and stays at 444) and BUS 166 MHz (the system keeps 222). Old saved settings are converted automatically. The clock file now stores MHz values.
+- **Sony Recovery > Rebuild Database:** shows the real error code and its meaning if app.db can't be deleted, and backs up app.db to `ux0:data/VitaRecovery/app.db.bak` first. It also removes leftover journal files and checks that the delete really happened. Sony's own Safe Mode is suggested if it's blocked.
+
 ## v1.1.3
 - Fix: the update check failed at once with "DNS lookup failed (0x80410116)" because the DNS timeout was passed in the wrong unit. It is now 5 seconds.
 

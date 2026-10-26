@@ -240,6 +240,20 @@ static void pf_reset_config(void) {
         return;
     }
 
+    /* v1.1.4: always keep a copy of the current config before resetting,
+     * in its own file so a manual backup is never overwritten. */
+    {
+        char before[256];
+        snprintf(before, sizeof(before), "%s.before_reset", config_path);
+        int br = pf_copy_file(config_path, before);
+        if (br < 0) {
+            char msg[64];
+            snprintf(msg, sizeof(msg), "Could not back up config (err %d).", br);
+            pf_message(msg, "Reset cancelled -- config unchanged.", COLOR_RED);
+            return;
+        }
+    }
+
     /* Minimal config — just what HENkaku needs to boot */
     static const char MINIMAL[] =
         "# PSVita taiHEN config - reset by PS Vita Recovery Menu\n"
@@ -279,7 +293,7 @@ static void pf_reset_config(void) {
         pf_message("Rename failed -- check *.tmp file.", "", COLOR_RED);
         return;
     }
-    pf_message("Config reset to minimal HENkaku config.",
+    pf_message("Reset done. Old config: <config>.before_reset",
                "Reboot to apply. Re-add your plugins manually.", COLOR_GREEN);
     /* Reload plugin list to reflect new state */
     plugins_load();
@@ -305,7 +319,7 @@ typedef struct {
     char label[128];    /* display text */
 } PfRow;
 
-#define PF_MAX_ROWS_LIST 128
+#define PF_MAX_ROWS_LIST (MAX_PLUGINS + 64)
 static PfRow pf_rows[PF_MAX_ROWS_LIST];
 static int   pf_row_count = 0;
 
@@ -417,9 +431,12 @@ static void pf_view_toggle(void) {
 
             /* Status badge on the right */
             if (essen) {
-                uint32_t bc = is_sel ? COLOR_SELECTED : RGBA8(0,220,220,255);
-                if (is_sel) display_text_transp(SCREEN_W - 88, y, bc, "[ON*]");
-                else        display_text(SCREEN_W - 88, y, bc, "[ON*]");
+                /* Protected: show the real state, never toggled here */
+                const char *eb = enabled ? "[ON*]" : "[OFF*]";
+                uint32_t bc = is_sel ? COLOR_SELECTED
+                              : (enabled ? RGBA8(0,220,220,255) : COLOR_YELLOW);
+                if (is_sel) display_text_transp(SCREEN_W - 104, y, bc, eb);
+                else        display_text(SCREEN_W - 104, y, bc, eb);
             } else {
                 char badge[8];
                 snprintf(badge, sizeof(badge), "[%s]", enabled ? "ON " : "OFF");
@@ -460,9 +477,12 @@ static void pf_view_toggle(void) {
             if (r == 0) {
                 dirty = 0;
                 pf_message("Saved successfully.",
-                           "Kernel plugins require reboot.", COLOR_GREEN);
+                           "Reboot to apply plugin changes.", COLOR_GREEN);
             } else {
-                pf_message("ERROR: Could not save config.txt.", "", COLOR_RED);
+                char eb[48];
+                snprintf(eb, sizeof(eb), "Config unchanged. Code 0x%08X",
+                         (unsigned int)plugins_last_error());
+                pf_message("ERROR: Could not save config.txt.", eb, COLOR_RED);
             }
             pf_drain(&old);
         }

@@ -29,7 +29,9 @@
 /* Max chars per description line — (960 - 40 left - 40 right) / 16px = 55 */
 #define MAX_DESC_CHARS 55
 
-static char g_msg[256] = "";
+static char g_msg[256]  = "";
+static char g_msg2[256] = "";   /* optional 2nd line (error detail/hint) */
+static char g_msg3[256] = "";   /* optional 3rd line */
 
 static int btn_pressed(SceCtrlData *now, SceCtrlData *old, unsigned int b) {
     return (now->buttons & b) && !(old->buttons & b);
@@ -109,7 +111,9 @@ static void result_screen(void *font, const char *title,
         draw_text(MENU_X, y,            ok ? COLOR_GREEN : COLOR_RED,
                                          ok ? "SUCCESS" : "ERROR");
         draw_text(MENU_X, y + LINE_H,   COLOR_TEXT, g_msg);
-        draw_text(MENU_X, y + LINE_H*3, COLOR_DIM,
+        if (g_msg2[0]) draw_text(MENU_X, y + LINE_H*2, COLOR_YELLOW, g_msg2);
+        if (g_msg3[0]) draw_text(MENU_X, y + LINE_H*3, COLOR_DIM,    g_msg3);
+        draw_text(MENU_X, y + LINE_H*5, COLOR_DIM,
                   offer_reboot && ok
                   ? "[Start] Reboot now    [O] Back"
                   : "[O] Back");
@@ -120,7 +124,10 @@ static void result_screen(void *font, const char *title,
         display_end();
 
         sceCtrlPeekBufferPositive(0, &ctrl, 1);
-        if (btn_pressed(&ctrl, &old, SCE_CTRL_CIRCLE)) return;
+        if (btn_pressed(&ctrl, &old, SCE_CTRL_CIRCLE)) {
+            g_msg2[0] = g_msg3[0] = '\0';   /* don't leak into the next result */
+            return;
+        }
         if (offer_reboot && ok &&
             btn_pressed(&ctrl, &old, SCE_CTRL_START))
             scePowerRequestColdReset();
@@ -157,27 +164,97 @@ static void do_restart_system(void *font) {
     scePowerRequestColdReset();
 }
 
+/* Short name for common Vita I/O error codes */
+static const char *io_err_name(int e) {
+    switch ((unsigned int)e) {
+        case 0x80010001: return "EPERM - not permitted";
+        case 0x80010002: return "ENOENT - file not found";
+        case 0x80010005: return "EIO - I/O error";
+        case 0x8001000D: return "EACCES - access denied";
+        case 0x80010010: return "EBUSY - file in use";
+        case 0x8001001E: return "EROFS - read-only";
+        default:         return "unknown error";
+    }
+}
+
+/* Copy src to dst. Returns 0 on success, else the failing error code. */
+static int copy_file(const char *src, const char *dst) {
+    SceUID in = sceIoOpen(src, SCE_O_RDONLY, 0);
+    if (in < 0) return in;
+    SceUID out = sceIoOpen(dst, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
+    if (out < 0) { sceIoClose(in); return out; }
+    static char buf[32 * 1024];
+    int r, ret = 0;
+    while ((r = sceIoRead(in, buf, sizeof(buf))) > 0) {
+        int w = sceIoWrite(out, buf, r);
+        if (w != r) { ret = (w < 0) ? w : -1; break; }
+    }
+    if (r < 0) ret = r;
+    sceIoClose(in);
+    sceIoClose(out);
+    if (ret != 0) sceIoRemove(dst);
+    return ret;
+}
+
+#define APP_DB_BACKUP_DIR  "ux0:data/VitaRecovery"
+#define APP_DB_BACKUP      "ux0:data/VitaRecovery/app.db.bak"
+
 static void do_rebuild_database(void *font) {
+    g_msg2[0] = g_msg3[0] = '\0';
     if (!confirm_screen(font,
             "Sony Recovery — Rebuild Database",
             "app.db will be deleted and rebuilt on next boot.",
-            "Games and saves will NOT be affected.")) {
+            "Games and saves are kept. Folders/layout reset.")) {
         snprintf(g_msg, sizeof(g_msg), "Cancelled.");
         result_screen(font, "Rebuild Database", 1, 0);
         return;
     }
     SceIoStat st;
-    if (sceIoGetstat(APP_DB_PATH, &st) < 0) {
-        snprintf(g_msg, sizeof(g_msg), "app.db not found. Already clean.");
-        result_screen(font, "Rebuild Database", 1, 0);
-        return;
-    }
-    if (sceIoRemove(APP_DB_PATH) < 0) {
-        snprintf(g_msg, sizeof(g_msg), "ERROR: Could not remove app.db.");
+    int gs = sceIoGetstat(APP_DB_PATH, &st);
+    if (gs < 0) {
+        snprintf(g_msg,  sizeof(g_msg),  "app.db not found. Nothing to delete.");
+        snprintf(g_msg2, sizeof(g_msg2), "Getstat code 0x%08X (%s)",
+                 (unsigned int)gs, io_err_name(gs));
         result_screen(font, "Rebuild Database", 0, 0);
         return;
     }
-    snprintf(g_msg, sizeof(g_msg), "Database removed. Reboot to rebuild.");
+
+    /* Safety copy first, so the old database can be put back by hand */
+    sceIoMkdir(APP_DB_BACKUP_DIR, 0777);
+    int bk = copy_file(APP_DB_PATH, APP_DB_BACKUP);
+
+    int rm = sceIoRemove(APP_DB_PATH);
+    if (rm < 0) {
+        snprintf(g_msg,  sizeof(g_msg),  "ERROR: Could not delete app.db.");
+        snprintf(g_msg2, sizeof(g_msg2), "Code 0x%08X (%s)",
+                 (unsigned int)rm, io_err_name(rm));
+        snprintf(g_msg3, sizeof(g_msg3),
+                 "Use Sony Safe Mode > Rebuild Database instead.");
+        result_screen(font, "Rebuild Database", 0, 0);
+        return;
+    }
+
+    /* Leftover SQLite side files would confuse the rebuild; remove them too.
+     * Missing files are fine. */
+    sceIoRemove("ur0:shell/db/app.db-journal");
+    sceIoRemove("ur0:shell/db/app.db-wal");
+    sceIoRemove("ur0:shell/db/app.db-shm");
+
+    /* Confirm it is really gone */
+    if (sceIoGetstat(APP_DB_PATH, &st) >= 0) {
+        snprintf(g_msg,  sizeof(g_msg),  "ERROR: app.db still exists after delete.");
+        snprintf(g_msg2, sizeof(g_msg2), "Reboot and try again, or use Safe Mode.");
+        result_screen(font, "Rebuild Database", 0, 0);
+        return;
+    }
+
+    snprintf(g_msg, sizeof(g_msg), "app.db deleted. Reboot to rebuild.");
+    if (bk == 0)
+        snprintf(g_msg2, sizeof(g_msg2), "Backup: ux0:data/VitaRecovery/app.db.bak");
+    else
+        snprintf(g_msg2, sizeof(g_msg2), "Backup failed 0x%08X (db still deleted)",
+                 (unsigned int)bk);
+    snprintf(g_msg3, sizeof(g_msg3), "First boot after this takes longer.");
     result_screen(font, "Rebuild Database", 1, 1);
 }
 
@@ -311,7 +388,7 @@ static const OfficialOption OPTIONS[] = {
       "Cold reboot. Same as power off and on.",
       do_restart_system, 0 },
     { "2. Rebuild Database",
-      "Deletes app.db. Firmware rebuilds on next boot.",
+      "Deletes app.db (backup kept). Rebuilt on next boot.",
       do_rebuild_database, 0 },
     { "3. Format Memory Card",
       "Erases ALL of ux0:. ux0:tai/ preserved. IRREVERSIBLE.",

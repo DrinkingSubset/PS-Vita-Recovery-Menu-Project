@@ -2,7 +2,7 @@
 
 /* ── Individual clock domain arrays ──────────────────────────────────────── */
 
-/* ARM CPU — 8 steps */
+/* ARM CPU — 7 steps (41..444) */
 extern const int CPU_ARM_FREQS[];
 extern const int CPU_ARM_COUNT;
 
@@ -10,7 +10,7 @@ extern const int CPU_ARM_COUNT;
 extern const int CPU_ES4_FREQS[];
 extern const int CPU_ES4_COUNT;
 
-/* BUS — 5 steps */
+/* BUS — 4 steps (55/83/111/222) */
 extern const int CPU_BUS_FREQS[];
 extern const int CPU_BUS_COUNT;
 
@@ -27,19 +27,19 @@ extern int g_cpu_set_err[4];   /* last scePowerSet* result per domain */
 
 /* ── API ──────────────────────────────────────────────────────────────────── */
 
-/* Call once at startup — sets indices to match default 333/166 clocks */
+/* Call once at startup — sets indices from the live hardware clocks */
 void        cpu_init(void);
 
 /* Apply all four domains immediately (called after any index change) */
 void        cpu_apply(void);
 
-/* Apply default preset: ARM=333, BUS=166, ES4=222, XBR=166 */
+/* Apply default preset: ARM=333, BUS=222, ES4=222, XBR=166 */
 void        cpu_apply_default(void);
 
 /* Apply powersave preset: all domains at minimum */
 void        cpu_apply_powersave(void);
 
-/* Save current indices to ux0:data/VitaRecovery/cpu_clocks.cfg */
+/* Save current clocks (MHz, format v2) to ux0:data/VitaRecovery/cpu_clocks.cfg */
 void        cpu_save(void);
 
 /* Load saved indices from file and apply them (call once at startup) */

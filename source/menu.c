@@ -38,8 +38,15 @@ static Menu     g_main_menu;
 static MenuItem g_advanced_items[14];
 static Menu     g_advanced_menu;
 
-// Plugins menu is dynamic (up to 64 plugins + 2 extra items)
-static MenuItem  g_plugin_items[MAX_PLUGINS + 16];
+// Plugins menu is dynamic: plugins + section headers + 5 action rows.
+// v1.1.4: g_plugin_item_idx maps a MENU row to its PLUGIN index. Before,
+// the menu row number was used directly, so once a section header was
+// above a plugin the WRONG plugin was toggled (the screen showed the change,
+// the config did not).
+#define PLUGIN_MENU_MAX_SECTIONS 32
+#define PLUGIN_MENU_ROWS (MAX_PLUGINS + PLUGIN_MENU_MAX_SECTIONS + 8)
+static MenuItem  g_plugin_items[PLUGIN_MENU_ROWS];
+static int       g_plugin_item_idx[PLUGIN_MENU_ROWS];
 static Menu      g_plugin_menu;
 
 static MenuItem  g_registry_items[16];
@@ -177,12 +184,16 @@ static void action_save_plugins(void) {
     display_hline(0, 34, SCREEN_W, COLOR_GREEN);
     if (r == 0) {
         display_text(MENU_X, 120, COLOR_GREEN, "Changes saved to config.txt");
-        display_text(MENU_X, 148, COLOR_TEXT, "Kernel plugins require reboot.");
+        display_text(MENU_X, 148, COLOR_YELLOW, "Reboot to apply plugin changes.");
         display_text(MENU_X, 176, COLOR_DIM, "Press any button to continue.");
     } else {
+        char eb[64];
+        snprintf(eb, sizeof(eb), "Detail code: 0x%08X",
+                 (unsigned int)plugins_last_error());
         display_text(MENU_X, 120, COLOR_RED, "ERROR: Could not save config.txt");
-        display_text(MENU_X, 148, COLOR_TEXT, "Check that ur0:tai/ exists.");
-        display_text(MENU_X, 176, COLOR_DIM, "Press any button to continue.");
+        display_text(MENU_X, 148, COLOR_TEXT, "Config was not changed.");
+        display_text(MENU_X, 176, COLOR_DIM, eb);
+        display_text(MENU_X, 204, COLOR_DIM, "Press any button to continue.");
     }
     display_end();
     SceCtrlData pad;
@@ -258,7 +269,7 @@ static void action_toggle_dev_unlock(void) {
 static void action_cpu_screen(void) { cpu_screen_run(); }
 
 // Storage for section header labels (static so pointers stay valid)
-static char g_section_labels[8][32];
+static char g_section_labels[PLUGIN_MENU_MAX_SECTIONS][40];
 static int  g_section_label_count = 0;
 
 static void build_plugins_menu_impl(Menu *parent) {
@@ -268,13 +279,16 @@ static void build_plugins_menu_impl(Menu *parent) {
     char last_section[64] = "";
     g_section_label_count = 0;
 
-    for (int i = 0; i < count && n < MAX_PLUGINS + 16; i++) {
+    for (int i = 0; i < PLUGIN_MENU_ROWS; i++) g_plugin_item_idx[i] = -1;
+
+    /* Leave room for the 5 action rows at the end */
+    for (int i = 0; i < count && n < PLUGIN_MENU_ROWS - 6; i++) {
         const char *sec = plugins_get_section(i);
         // Insert section header when section changes
         if (strcmp(sec, last_section) != 0) {
             snprintf(last_section, sizeof(last_section), "%s", sec);
-            if (g_section_label_count < 8) {
-                snprintf(g_section_labels[g_section_label_count], 32, "*%s", sec);
+            if (g_section_label_count < PLUGIN_MENU_MAX_SECTIONS) {
+                snprintf(g_section_labels[g_section_label_count], 40, "*%s", sec);
                 g_plugin_items[n].label   = g_section_labels[g_section_label_count++];
                 g_plugin_items[n].type    = ITEM_HEADER;
                 g_plugin_items[n].action  = NULL;
@@ -282,6 +296,7 @@ static void build_plugins_menu_impl(Menu *parent) {
                 n++;
             }
         }
+        g_plugin_item_idx[n]      = i;
         g_plugin_items[n].label   = plugins_get_name(i);
         /* Essential plugins shown as ITEM_ACTION (not toggleable) */
         g_plugin_items[n].type    = plugins_is_essential(i) ? ITEM_ACTION : ITEM_TOGGLE;
@@ -482,9 +497,21 @@ void menu_handle_input(Menu **current, SceCtrlData *old) {
             case ITEM_TOGGLE:
                 // Check if this is a plugin item
                 if (m == &g_plugin_menu) {
-                    int plugin_idx = m->selected;
-                    plugins_toggle(plugin_idx);
-                    g_plugin_items[plugin_idx].enabled ^= 1;
+                    /* Map the menu row to the real plugin, then save right
+                     * away (like AutoPlugin2). On failure undo the toggle. */
+                    int row = m->selected;
+                    int plugin_idx = (row >= 0 && row < PLUGIN_MENU_ROWS)
+                                     ? g_plugin_item_idx[row] : -1;
+                    if (plugin_idx >= 0 && !plugins_is_essential(plugin_idx)) {
+                        plugins_toggle(plugin_idx);
+                        if (plugins_save() == 0) {
+                            g_plugin_items[row].enabled = plugins_is_enabled(plugin_idx);
+                        } else {
+                            plugins_toggle(plugin_idx);   /* undo */
+                            menu_show_error("Could not save config.txt (unchanged)",
+                                            plugins_last_error());
+                        }
+                    }
                 }
                 // Check if this is a registry item
                 else if (m == &g_registry_menu) {
