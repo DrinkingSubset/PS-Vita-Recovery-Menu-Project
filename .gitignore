@@ -1,0 +1,5 @@
+build/
+*.vpk
+*.tmp
+*.old
+.DS_Store
