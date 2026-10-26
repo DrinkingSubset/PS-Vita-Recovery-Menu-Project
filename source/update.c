@@ -223,7 +223,10 @@ static int parse_release(const char *json, Release *r) {
 
 /* "v1.2.3" / "1.2.3" -> 1*10000 + 2*100 + 3 ; -1 on parse failure */
 static long version_value(const char *s) {
-    if (*s == 'v' || *s == 'V') s++;
+    /* Skip any prefix before the first digit, so "v1.1.4", "v.1.1.4",
+     * "V 1.1.4" and "1.1.4" all read as 1.1.4 (v1.1.5 fix: the tag
+     * "v.1.1.4" used to fail and show "installed is newer"). */
+    while (*s && (*s < '0' || *s > '9')) s++;
     int a = 0, b = 0, c = 0;
     if (sscanf(s, "%d.%d.%d", &a, &b, &c) < 2) return -1;
     return (long)a * 10000 + (long)b * 100 + (long)c;
@@ -279,7 +282,7 @@ typedef enum {
 
 static Phase   g_phase;
 static Release g_rel;
-static int     g_newer;            /* 1 = newer, 0 = same, -1 = older/unknown */
+static int     g_newer;            /* 1 = release newer, 0 = same, -1 = installed newer, -2 = unknown */
 static char    g_err[256];
 static char    g_saved_path[160];
 static char    g_hash_msg[96];
@@ -336,11 +339,13 @@ static void draw_screen(void) {
             display_text(MENU_X, y + LINE_H * 9, COLOR_YELLOW,
                          "Note: the Vita clock looks wrong; date check skipped.");
         if (g_newer > 0)
-            display_text(MENU_X, y, COLOR_GREEN,  "A newer version is available!");
+            display_text(MENU_X, y, COLOR_YELLOW, "Installed version is older than the release.");
         else if (g_newer == 0)
-            display_text(MENU_X, y, COLOR_GREEN,  "You are up to date.");
-        else
+            display_text(MENU_X, y, COLOR_GREEN,  "Installed version is up to date.");
+        else if (g_newer == -1)
             display_text(MENU_X, y, COLOR_YELLOW, "Installed version is newer than the release.");
+        else
+            display_text(MENU_X, y, COLOR_YELLOW, "Could not read the release version number.");
         y += LINE_H + 10;
 
         if (g_rel.have_asset) {
@@ -480,9 +485,8 @@ static void do_check(void) {
 
     long cur = version_value(APP_VERSION);
     long lat = version_value(g_rel.tag);
-    if (cur < 0 || lat < 0) g_newer = -1;
+    if (cur < 0 || lat < 0) g_newer = -2;
     else g_newer = (lat > cur) ? 1 : (lat == cur ? 0 : -1);
-    if (cur >= 0 && lat >= 0 && lat < cur) g_newer = -1;
     g_phase = PH_RESULT;
 }
 

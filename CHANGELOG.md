@@ -3,6 +3,12 @@
 By DrinkingSubset. Newest version first. Copy a version's block straight into
 the GitHub release notes.
 
+## v1.1.5
+- Fix: after "Save Changes" in the Plugins menu, the "Changes saved... reboot to apply" message closed straight away unless X was held down. The message, plus the Clean Config and Remove Duplicates screens, now waits until you let go of X and press a button.
+- **Safety fix:** a held X could skip confirmation screens. Clean Config, the Sony Recovery confirms (including the 3-step Format Memory Card and Restore System) and the Cheat Manager screens counted the X that opened them as a new press. Each screen now needs a fresh press.
+- Check for Updates: the result line now reads "Installed version is up to date", "...is older than the release" or "...is newer than the release". Release tags written as `v.1.1.4` (extra dot) are now read correctly; before, they showed "newer than the release" even when the versions matched.
+- Rebuild Database: when app.db can't be seen, the screen now says nothing was deleted. It shows which part of `ur0:shell/db` this app can reach, so the cause can be found.
+
 ## v1.1.4
 - **Plugin toggles now really work.** In the Plugins menu, turning a plugin on or off changed a *different* plugin in config.txt whenever a section header (like `*KERNEL` or `*main`) was above it. The menu showed the change, but the config didn't get it. Each row now maps to the right plugin.
 - Plugin changes now **save immediately** (like AutoPlugin2). If the save fails, the switch flips back and the error code is shown. Reboot to apply.

@@ -183,7 +183,7 @@ static void vita_editor(void *font, const char *path) {
     vita_parse(path);
 
     if (g_vcheat_count == 0) {
-        SceCtrlData old, ctrl; memset(&old, 0, sizeof(old));
+        SceCtrlData old, ctrl; memset(&old, 0, sizeof(old)); sceCtrlPeekBufferPositive(0, &old, 1); /* held buttons are not new presses */
         while (1) {
             display_start(); display_clear(COLOR_BG);
             title_bar("Vita Cheat Editor");
@@ -198,7 +198,7 @@ static void vita_editor(void *font, const char *path) {
 
     int sel = 0, scroll = 0, dirty = 0;
     const int VIS = 9;
-    SceCtrlData old, ctrl; memset(&old, 0, sizeof(old));
+    SceCtrlData old, ctrl; memset(&old, 0, sizeof(old)); sceCtrlPeekBufferPositive(0, &old, 1); /* held buttons are not new presses */
 
     while (1) {
         display_start(); display_clear(COLOR_BG);
@@ -270,7 +270,7 @@ static void vita_cheat_picker(void *font) {
     }
 
     int sel = 0;
-    SceCtrlData old, ctrl; memset(&old, 0, sizeof(old));
+    SceCtrlData old, ctrl; memset(&old, 0, sizeof(old)); sceCtrlPeekBufferPositive(0, &old, 1); /* held buttons are not new presses */
 
     while (1) {
         display_start(); display_clear(COLOR_BG);
@@ -420,7 +420,7 @@ static void cw_edit_game(void *font, CWGame *game) {
 
     int sel = 0, scroll = 0, dirty = 0;
     const int VIS = 9;
-    SceCtrlData old, ctrl; memset(&old, 0, sizeof(old));
+    SceCtrlData old, ctrl; memset(&old, 0, sizeof(old)); sceCtrlPeekBufferPositive(0, &old, 1); /* held buttons are not new presses */
 
     while (1) {
         display_start(); display_clear(COLOR_BG);
@@ -489,7 +489,7 @@ static void cw_edit_game(void *font, CWGame *game) {
 
 static void cwcheat_manager(void *font) {
     if (!file_exists(CW_DB_PATH)) {
-        SceCtrlData old, ctrl; memset(&old, 0, sizeof(old));
+        SceCtrlData old, ctrl; memset(&old, 0, sizeof(old)); sceCtrlPeekBufferPositive(0, &old, 1); /* held buttons are not new presses */
         while (1) {
             display_start(); display_clear(COLOR_BG);
             title_bar("CWCheat DB Manager");
@@ -506,7 +506,7 @@ static void cwcheat_manager(void *font) {
     }
 
     if (cw_load_db() < 0) {
-        SceCtrlData old, ctrl; memset(&old, 0, sizeof(old));
+        SceCtrlData old, ctrl; memset(&old, 0, sizeof(old)); sceCtrlPeekBufferPositive(0, &old, 1); /* held buttons are not new presses */
         while (1) {
             display_start(); display_clear(COLOR_BG);
             title_bar("CWCheat DB Manager");
@@ -521,7 +521,7 @@ static void cwcheat_manager(void *font) {
 
     int sel = 0, scroll = 0;
     const int VIS = 10;
-    SceCtrlData old, ctrl; memset(&old, 0, sizeof(old));
+    SceCtrlData old, ctrl; memset(&old, 0, sizeof(old)); sceCtrlPeekBufferPositive(0, &old, 1); /* held buttons are not new presses */
 
     while (1) {
         display_start(); display_clear(COLOR_BG);
@@ -579,7 +579,7 @@ void cheat_manager_screen_run(void *font) {
           cwcheat_manager },
     };
     int sel = 0;
-    SceCtrlData old, ctrl; memset(&old, 0, sizeof(old));
+    SceCtrlData old, ctrl; memset(&old, 0, sizeof(old)); sceCtrlPeekBufferPositive(0, &old, 1); /* held buttons are not new presses */
 
     /* Drain any buttons held from the menu (e.g. X that opened this screen) */
     do { sceCtrlPeekBufferPositive(0, &old, 1); } while (old.buttons);

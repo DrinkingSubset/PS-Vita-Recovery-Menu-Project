@@ -122,6 +122,8 @@ static void action_clean_config(void) {
     display_text(MENU_X, 174, COLOR_GREEN, "Press X to continue, O to cancel.");
     display_end();
     SceCtrlData pad;
+    /* v1.1.4: wait for the button that opened this screen to be released */
+    while (1) { sceCtrlReadBufferPositive(0, &pad, 1); if (!pad.buttons) break; sceKernelDelayThread(50000); }
     while (1) { sceCtrlReadBufferPositive(0, &pad, 1); if (pad.buttons) break; sceKernelDelayThread(50000); }
     int confirmed = (pad.buttons & SCE_CTRL_CROSS);
     while (1) { sceCtrlReadBufferPositive(0, &pad, 1); if (!pad.buttons) break; sceKernelDelayThread(50000); }
@@ -142,6 +144,8 @@ static void action_clean_config(void) {
     }
     display_text(MENU_X, 210, COLOR_DIM, "Press any button to continue.");
     display_end();
+    /* v1.1.4: wait for the button that opened this screen to be released */
+    while (1) { sceCtrlReadBufferPositive(0, &pad, 1); if (!pad.buttons) break; sceKernelDelayThread(50000); }
     while (1) { sceCtrlReadBufferPositive(0, &pad, 1); if (pad.buttons) break; sceKernelDelayThread(50000); }
     while (1) { sceCtrlReadBufferPositive(0, &pad, 1); if (!pad.buttons) break; sceKernelDelayThread(50000); }
     build_plugins_menu_impl(g_plugin_menu.parent);
@@ -168,6 +172,8 @@ static void action_remove_duplicate_plugins(void) {
     display_text(MENU_X, 220, COLOR_DIM, "Press any button to continue.");
     display_end();
     SceCtrlData pad;
+    /* v1.1.4: wait for the button that opened this screen to be released */
+    while (1) { sceCtrlReadBufferPositive(0, &pad, 1); if (!pad.buttons) break; sceKernelDelayThread(50000); }
     while (1) { sceCtrlReadBufferPositive(0, &pad, 1); if (pad.buttons) break; sceKernelDelayThread(50000); }
     while (1) { sceCtrlReadBufferPositive(0, &pad, 1); if (!pad.buttons) break; sceKernelDelayThread(50000); }
     // Reload plugin list after removing duplicates
@@ -197,6 +203,13 @@ static void action_save_plugins(void) {
     }
     display_end();
     SceCtrlData pad;
+    /* v1.1.4: wait until X (used to pick "Save Changes") is released,
+     * otherwise this message closed straight away */
+    while (1) {
+        sceCtrlReadBufferPositive(0, &pad, 1);
+        if (!pad.buttons) break;
+        sceKernelDelayThread(50000);
+    }
     while (1) {
         sceCtrlReadBufferPositive(0, &pad, 1);
         if (pad.buttons) break;

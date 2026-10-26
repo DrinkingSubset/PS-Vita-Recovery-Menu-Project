@@ -69,6 +69,10 @@ static int confirm_screen(void *font, const char *title,
                            const char *warning, const char *detail) {
     SceCtrlData old, ctrl;
     memset(&old, 0, sizeof(old));
+    /* v1.1.4: start from the buttons held right now. Before, the X that
+     * opened this screen counted as a NEW press, so a held X could pass
+     * the confirm screens (and close result screens) instantly. */
+    sceCtrlPeekBufferPositive(0, &old, 1);
     while (1) {
         display_start();
         display_clear(COLOR_BG);
@@ -102,6 +106,10 @@ static void result_screen(void *font, const char *title,
                            int ok, int offer_reboot) {
     SceCtrlData old, ctrl;
     memset(&old, 0, sizeof(old));
+    /* v1.1.4: start from the buttons held right now. Before, the X that
+     * opened this screen counted as a NEW press, so a held X could pass
+     * the confirm screens (and close result screens) instantly. */
+    sceCtrlPeekBufferPositive(0, &old, 1);
     while (1) {
         display_start();
         display_clear(COLOR_BG);
@@ -212,9 +220,26 @@ static void do_rebuild_database(void *font) {
     SceIoStat st;
     int gs = sceIoGetstat(APP_DB_PATH, &st);
     if (gs < 0) {
-        snprintf(g_msg,  sizeof(g_msg),  "app.db not found. Nothing to delete.");
-        snprintf(g_msg2, sizeof(g_msg2), "Getstat code 0x%08X (%s)",
-                 (unsigned int)gs, io_err_name(gs));
+        /* Every Vita has this file, so "not found" usually means this app
+         * is not allowed to see ur0:shell. Probe the folders so the next
+         * test tells us exactly where access stops. */
+        SceIoStat ps;
+        int sh = sceIoGetstat("ur0:shell", &ps);
+        int db = sceIoGetstat("ur0:shell/db", &ps);
+        SceUID dd = sceIoDopen("ur0:shell/db");
+        int dn = 0;
+        if (dd >= 0) {
+            SceIoDirent de;
+            while (sceIoDread(dd, &de) > 0) dn++;
+            sceIoDclose(dd);
+        }
+        snprintf(g_msg,  sizeof(g_msg),  "Can't see app.db (0x%08X %s)",
+                 (unsigned int)gs, gs == (int)0x80010002 ? "ENOENT" : "");
+        snprintf(g_msg2, sizeof(g_msg2), "shell %08X  db %08X  dir %08X/%d",
+                 (unsigned int)sh, (unsigned int)db,
+                 (unsigned int)(dd < 0 ? dd : 0), dn);
+        snprintf(g_msg3, sizeof(g_msg3),
+                 "Nothing deleted. Use Sony Safe Mode for now.");
         result_screen(font, "Rebuild Database", 0, 0);
         return;
     }
