@@ -3,6 +3,15 @@
 By DrinkingSubset. Newest version first. Copy a version's block straight into
 the GitHub release notes.
 
+## v1.1.8
+- **New: Plugin Fix Mode > Undo Safe Mode.** Puts back your exact config from before Safe Mode ran, including plugins you had deliberately turned off. Safe Mode now keeps that copy every time it runs: in Plugin Fix, at L-trigger boot (`<config>.before_safemode`), and in Restore / Unbrick (`tai_backup/<drive>_config_before_safemode.txt`). Undo uses the newest one.
+- Running Safe Mode a second time no longer overwrites that copy with the already-disabled config. Plugin Fix tells you when Safe Mode is already active.
+- "Re-enable All" now says what it really does: it turns on **all** plugins, including ones you had turned off.
+- Fix: the **Plugins** list now re-reads `config.txt` every time you open it. Before, it was read once at app start, so after Plugin Fix or Restore / Unbrick changed the config, it still showed the old ON/OFF states until the app restarted.
+- Plugin Fix header now reads "N plugins in config: X ON, Y OFF" instead of "N plugins loaded", which sounded like N were running.
+- Plugin Fix backup / restore / undo now handle configs up to 128 KB (was 16 KB).
+- `restore.log` no longer grows forever: over 32 KB it's moved to `restore.log.old` and a new log starts.
+
 ## v1.1.7
 Safety release based on an outside code review of v1.1.6.
 
