@@ -58,6 +58,13 @@ static SceUID        g_log_fd          = -1;
 /* ── Logging ──────────────────────────────────────────────────────────────── */
 static void log_open(void) {
     sceIoMkdir(RECOVERY_ROOT, 0777);
+    /* v1.1.8: keep the log small. Over 32 KB it is moved to restore.log.old
+     * (one previous log kept) and a new one is started. */
+    SceIoStat ls;
+    if (sceIoGetstat(LOG_PATH, &ls) >= 0 && ls.st_size > 32 * 1024) {
+        sceIoRemove(LOG_PATH ".old");
+        sceIoRename(LOG_PATH, LOG_PATH ".old");
+    }
     g_log_fd = sceIoOpen(LOG_PATH,
                          SCE_O_WRONLY | SCE_O_CREAT | SCE_O_APPEND, 0777);
 }
@@ -268,16 +275,6 @@ static RestoreStatus safe_mode_one_config(const char *config_path) {
     char *buf = NULL; int len = 0;
     if (read_file(config_path, &buf, &len) < 0) return RESTORE_ERR_IO;
 
-    /* Back up first; no backup = no change */
-    char bak[160];
-    backup_name(config_path, "before_safemode", bak, sizeof(bak));
-    restore_ensure_dirs();
-    if (write_file(bak, buf, len) < 0) {
-        free(buf);
-        log_write("Safe Mode: backup failed, config left unchanged");
-        return RESTORE_ERR_IO;
-    }
-
     char *out = malloc(len * 2 + 256);
     if (!out) { free(buf); return RESTORE_ERR_IO; }
     int out_pos = 0, disabled = 0;
@@ -304,6 +301,19 @@ static RestoreStatus safe_mode_one_config(const char *config_path) {
         memcpy(out + out_pos, p, ll); out_pos += ll;
         if (nl) out[out_pos++] = '\n';
         p = nl ? nl + 1 : end;
+    }
+    /* Back up first; no backup = no change. v1.1.8: only when something
+     * will change, so running Safe Mode twice never replaces the real
+     * pre-Safe-Mode config with the already-disabled one. */
+    char bak[160] = "(none)";
+    if (disabled > 0) {
+        backup_name(config_path, "before_safemode", bak, sizeof(bak));
+        restore_ensure_dirs();
+        if (write_file(bak, buf, len) < 0) {
+            free(buf); free(out);
+            log_write("Safe Mode: backup failed, config left unchanged");
+            return RESTORE_ERR_IO;
+        }
     }
     free(buf);
 

@@ -109,12 +109,22 @@ static void pf_safe_mode(void) {
         return;
     }
     int changed = 0;
-    for (int i = 0; i < n; i++) {
-        if (!plugins_is_essential(i) && plugins_is_enabled(i)) {
-            plugins_toggle(i);
-            changed++;
-        }
+    for (int i = 0; i < n; i++)
+        if (!plugins_is_essential(i) && plugins_is_enabled(i)) changed++;
+    if (changed == 0) {
+        pf_message("Safe Mode is already active.",
+                   "No plugins needed to be turned off.", COLOR_YELLOW);
+        return;
     }
+    /* v1.1.8: keep the exact config so "Undo Safe Mode" can bring it back */
+    if (plugins_snapshot("before_safemode") < 0) {
+        pf_message("ERROR: Could not back up config.txt.",
+                   "Safe Mode cancelled -- nothing changed.", COLOR_RED);
+        return;
+    }
+    for (int i = 0; i < n; i++)
+        if (!plugins_is_essential(i) && plugins_is_enabled(i))
+            plugins_toggle(i);
     int r = plugins_save();
     if (r < 0) {
         pf_message("ERROR: Could not save config.txt",
@@ -128,7 +138,7 @@ static void pf_safe_mode(void) {
 
 /* ── Re-enable All: undo safe mode ─────────────────────────────────────── */
 static void pf_reenable_all(void) {
-    if (!pf_confirm("Re-enable ALL non-essential plugins?")) return;
+    if (!pf_confirm("Turn on ALL plugins, even ones you had off?")) return;
     int n = plugins_get_count();
     if (n <= 0) {
         pf_message("No plugins found in config.", "", COLOR_YELLOW);
@@ -156,7 +166,7 @@ static void pf_reenable_all(void) {
 /* WARNING: this overwrites config.txt completely.                          */
 /* ── Backup / Restore config ────────────────────────────────────────────── */
 #define PF_BACKUP_PATH "ur0:tai/config_backup.txt"
-#define PF_COPY_BUF    (16 * 1024)   /* 16KB — plenty for any config.txt */
+#define PF_COPY_BUF    (128 * 1024)  /* v1.1.8: was 16KB; large configs failed */
 
 static int pf_backup_exists(void) {
     SceIoStat st;
@@ -259,6 +269,57 @@ static void pf_restore_config(void) {
         char msg[64];
         snprintf(msg, sizeof(msg), "Restore failed (err %d).", r);
         pf_message(msg, "Backup file may be corrupted.", COLOR_RED);
+    }
+}
+
+/* ── Undo Safe Mode (v1.1.8) ─────────────────────────────────────────────
+ * Safe Mode (here, at L-trigger boot, or in Restore / Unbrick) keeps a copy
+ * of the config from just before it ran. This puts that exact copy back,
+ * unlike Re-enable All, which also turns on plugins you had switched off. */
+static int pf_newer(const SceIoStat *a, const SceIoStat *b) {
+    const SceDateTime *x = &a->st_mtime, *y = &b->st_mtime;
+    if (x->year   != y->year)   return x->year   > y->year;
+    if (x->month  != y->month)  return x->month  > y->month;
+    if (x->day    != y->day)    return x->day    > y->day;
+    if (x->hour   != y->hour)   return x->hour   > y->hour;
+    if (x->minute != y->minute) return x->minute > y->minute;
+    return x->second > y->second;
+}
+
+static void pf_undo_safe_mode(void) {
+    const char *cfg = plugins_get_config_path();
+    if (!cfg || cfg[0] == '(') {
+        pf_message("ERROR: No active config path found.", "", COLOR_RED);
+        return;
+    }
+    /* Candidate 1: <config>.before_safemode (Plugin Fix / L-trigger) */
+    char a[280];
+    snprintf(a, sizeof(a), "%s.before_safemode", cfg);
+    /* Candidate 2: Restore / Unbrick backup, e.g. ur0_config_before_safemode.txt */
+    char dev[8] = ""; int k = 0;
+    while (cfg[k] && cfg[k] != ':' && k < 7) { dev[k] = cfg[k]; k++; }
+    dev[k] = '\0';
+    char b[200];
+    snprintf(b, sizeof(b), "ux0:data/vita_recovery/tai_backup/%s_config_before_safemode.txt", dev);
+
+    SceIoStat sa, sb;
+    int ha = sceIoGetstat(a, &sa) >= 0, hb = sceIoGetstat(b, &sb) >= 0;
+    if (!ha && !hb) {
+        pf_message("No Safe Mode backup found.",
+                   "Safe Mode makes one each time it runs.", COLOR_YELLOW);
+        return;
+    }
+    const char *src = (ha && hb) ? (pf_newer(&sb, &sa) ? b : a) : (ha ? a : b);
+
+    if (!pf_confirm("Restore your config from before Safe Mode?")) return;
+    int r = pf_copy_file(src, cfg);
+    if (r >= 0)
+        pf_message("Config from before Safe Mode restored.",
+                   "Reboot to apply.", COLOR_GREEN);
+    else {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "Undo failed (err %d). Config unchanged.", r);
+        pf_message(msg, "", COLOR_RED);
     }
 }
 
@@ -559,12 +620,13 @@ typedef struct {
 static const PfOption PF_OPTIONS[] = {
     { "Safe Mode",        "Disable all non-essential plugins (keeps henkaku)" },
     { "View & Toggle",    "Browse and toggle individual plugins"               },
-    { "Re-enable All",    "Turn all non-essential plugins back on"             },
+    { "Undo Safe Mode",   "Put back your exact config from before Safe Mode"   },
+    { "Re-enable All",    "Turn on ALL plugins, even ones you had turned off"  },
     { "Reset to Minimal", "Overwrite config with bare HENkaku minimum"         },
     { "Backup Config",    "Save current config.txt to ur0:tai/config_backup.txt" },
     { "Restore Backup",   "Restore config from ur0:tai/config_backup.txt"        },
 };
-#define PF_OPTION_COUNT 6
+#define PF_OPTION_COUNT 7
 
 void plugin_fix_run(void *font) {
     (void)font;
@@ -599,9 +661,13 @@ void plugin_fix_run(void *font) {
         snprintf(conf_line, sizeof(conf_line), "Config: %s", plugins_get_config_path());
         display_text(MENU_X, PF_WARN_Y + 4,            COLOR_DIM,    conf_line);
         char count_line[64];
+        /* v1.1.8: this counts plugin LINES in the config, ON and OFF.
+         * "N plugins loaded" read as "N plugins running". */
+        int n_all = plugins_get_count(), n_on = 0;
+        for (int i = 0; i < n_all; i++) if (plugins_is_enabled(i)) n_on++;
         snprintf(count_line, sizeof(count_line),
-                 "%d plugin%s loaded.", plugins_get_count(),
-                 plugins_get_count() == 1 ? "" : "s");
+                 "%d plugin%s in config: %d ON, %d OFF", n_all,
+                 n_all == 1 ? "" : "s", n_on, n_all - n_on);
         display_text(MENU_X, PF_WARN_Y + 4 + LINE_H,   COLOR_TEXT,   count_line);
         /* Backup status */
         if (pf_backup_exists())
@@ -645,10 +711,11 @@ void plugin_fix_run(void *font) {
             switch (sel) {
                 case 0: pf_safe_mode();    plugins_load(); break;
                 case 1: pf_view_toggle();  plugins_load(); break;
-                case 2: pf_reenable_all(); plugins_load(); break;
-                case 3: pf_reset_config(); break;
-                case 4: pf_backup_config();  break;
-                case 5: pf_restore_config(); plugins_load(); break;
+                case 2: pf_undo_safe_mode(); plugins_load(); break;
+                case 3: pf_reenable_all(); plugins_load(); break;
+                case 4: pf_reset_config(); break;
+                case 5: pf_backup_config();  break;
+                case 6: pf_restore_config(); plugins_load(); break;
             }
             pf_drain(&old);
         }

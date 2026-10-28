@@ -16,3 +16,4 @@ int plugins_remove_duplicates(void);
 int plugins_clean_config(void);
 int plugins_apply_safe_mode(void);  /* disable all non-essential plugins, no confirm */
 int plugins_last_error(void);       /* detail code of the last load/save failure */
+int plugins_snapshot(const char *suffix);   /* copy config to <config>.<suffix> */

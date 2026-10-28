@@ -550,6 +550,12 @@ void menu_handle_input(Menu **current, SceCtrlData *old) {
 
             case ITEM_SUBMENU:
                 if (item->submenu) {
+                    /* v1.1.8: re-read config.txt every time Plugins opens.
+                     * The list was built once at app start, so after Plugin
+                     * Fix Mode / Restore changed the config it still showed
+                     * the old ON/OFF states until the app was restarted. */
+                    if (item->submenu == &g_plugin_menu)
+                        build_plugins_menu_impl(m);
                     item->submenu->parent = m;
                     *current = item->submenu;
                 }

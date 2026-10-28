@@ -316,6 +316,23 @@ void        plugins_toggle(int idx)          { if (idx >= 0 && idx < g_plugin_co
 const char *plugins_get_config_path(void)    { const char *p = get_active_config(); return p ? p : "(no config found)"; }
 int         plugins_last_error(void)         { return g_last_err; }
 
+/* v1.1.8: copy the active config to "<config>.<suffix>" (verified).
+ * Used to keep the config from before Safe Mode so it can be undone. */
+int plugins_snapshot(const char *suffix) {
+    const char *config_path = get_active_config();
+    if (!config_path) { g_last_err = -20; return -1; }
+    int len;
+    char *buf = read_file_alloc(config_path, &len);
+    if (!buf) return -1;
+    char dst[300];
+    snprintf(dst, sizeof(dst), "%s.%s", config_path, suffix);
+    int r = write_all(dst, buf, len);
+    if (r == 0 && !file_matches(dst, buf, len)) r = -1;
+    free(buf);
+    if (r < 0) { g_last_err = r; return -1; }
+    return 0;
+}
+
 const char *plugins_get_name(int idx) {
     if (idx < 0 || idx >= g_plugin_count) return "???";
     return basename_of(g_plugins[idx].path);
@@ -658,6 +675,13 @@ int plugins_clean_config(void) {
 int plugins_apply_safe_mode(void) {
     int n = plugins_get_count();
     if (n <= 0) return -1;
+    /* v1.1.8: keep the config from before Safe Mode (only when something
+     * will change, so a second Safe Mode never overwrites the real one) */
+    for (int i = 0; i < n; i++)
+        if (!plugins_is_essential(i) && plugins_is_enabled(i)) {
+            plugins_snapshot("before_safemode");
+            break;
+        }
     int changed = 0;
     for (int i = 0; i < n; i++) {
         if (!plugins_is_essential(i) && plugins_is_enabled(i)) {
