@@ -31,6 +31,7 @@
 /* Net init memory pool */
 static char g_net_memory[1 * 1024 * 1024];   /* 1 MB */
 #include "ftp_server.h"
+#include "fs_policy.h"
 #include "display.h"
 #include "draw.h"
 #include "menu.h"
@@ -44,10 +45,12 @@ static char g_net_memory[1 * 1024 * 1024];   /* 1 MB */
 #define FTP_PATH_SIZE   256
 
 /* ── Mount points exposed as virtual root directories ─────────────────────── */
+/* v1.1.9: system drives listed too, but READ-ONLY (fs_policy.c) */
 static const char *g_mounts[] = {
-    "ux0:", "ur0:", "imc0:", "uma0:", "grw0:", "host0:", "psp0:"
+    "ux0:", "ur0:", "imc0:", "uma0:", "xmc0:", "grw0:", "host0:", "psp0:",
+    "os0:", "vs0:", "sa0:", "pd0:", "tm0:", "ud0:", "vd0:"
 };
-#define MOUNT_COUNT  7
+#define MOUNT_COUNT  ((int)(sizeof(g_mounts) / sizeof(g_mounts[0])))
 
 /* ── Server state ─────────────────────────────────────────────────────────── */
 static volatile int  g_running     = 0;
@@ -189,8 +192,12 @@ static void send_list(FtpSession *s, int data_conn, const char *vpath) {
         for (int i = 0; i < MOUNT_COUNT; i++) {
             /* Check if mount point is accessible */
             SceIoStat st;
-            if (sceIoGetstat(g_mounts[i], &st) >= 0 ||
-                sceIoDopen(g_mounts[i]) >= 0) {
+            int ok = (sceIoGetstat(g_mounts[i], &st) >= 0);
+            if (!ok) {
+                SceUID dfd = sceIoDopen(g_mounts[i]);   /* v1.1.9: was never closed */
+                if (dfd >= 0) { ok = 1; sceIoDclose(dfd); }
+            }
+            if (ok) {
                 snprintf(line, sizeof(line),
                          "drwxr-xr-x 1 vita vita 0 Jan 01 00:00 %s\r\n",
                          g_mounts[i]);
@@ -433,6 +440,11 @@ static int ftp_session_thread(SceSize args, void *argp) {
             resolve_path(s, arg, vpath, sizeof(vpath));
             char real[FTP_PATH_SIZE];
             vpath_to_real(vpath, real, sizeof(real));
+            if (!fs_path_writable(real)) {
+                net_send_resp(s->ctrl_sock, 550, "Read-only drive.");
+                close_data_conn(s, -1);   /* drop the prepared PASV socket */
+                continue;
+            }
             net_send_resp(s->ctrl_sock, 150, "Opening data connection.");
             int dc = open_data_conn(s);
             if (dc < 0) {
@@ -448,7 +460,9 @@ static int ftp_session_thread(SceSize args, void *argp) {
             resolve_path(s, arg, vpath, sizeof(vpath));
             char real[FTP_PATH_SIZE];
             vpath_to_real(vpath, real, sizeof(real));
-            if (sceIoRemove(real) >= 0)
+            if (!fs_path_writable(real))
+                net_send_resp(s->ctrl_sock, 550, "Read-only drive.");
+            else if (sceIoRemove(real) >= 0)
                 net_send_resp(s->ctrl_sock, 250, "File deleted.");
             else
                 net_send_resp(s->ctrl_sock, 550, "Delete failed.");
@@ -458,7 +472,9 @@ static int ftp_session_thread(SceSize args, void *argp) {
             resolve_path(s, arg, vpath, sizeof(vpath));
             char real[FTP_PATH_SIZE];
             vpath_to_real(vpath, real, sizeof(real));
-            if (sceIoMkdir(real, 0777) >= 0) {
+            if (!fs_path_writable(real)) {
+                net_send_resp(s->ctrl_sock, 550, "Read-only drive.");
+            } else if (sceIoMkdir(real, 0777) >= 0) {
                 char msg[FTP_PATH_SIZE + 4];
                 snprintf(msg, sizeof(msg), "\"%s\" created.", vpath);
                 net_send_resp(s->ctrl_sock, 257, msg);
@@ -471,7 +487,9 @@ static int ftp_session_thread(SceSize args, void *argp) {
             resolve_path(s, arg, vpath, sizeof(vpath));
             char real[FTP_PATH_SIZE];
             vpath_to_real(vpath, real, sizeof(real));
-            if (sceIoRmdir(real) >= 0)
+            if (!fs_path_writable(real))
+                net_send_resp(s->ctrl_sock, 550, "Read-only drive.");
+            else if (sceIoRmdir(real) >= 0)
                 net_send_resp(s->ctrl_sock, 250, "Directory removed.");
             else
                 net_send_resp(s->ctrl_sock, 550, "RMD failed.");
@@ -487,7 +505,9 @@ static int ftp_session_thread(SceSize args, void *argp) {
             resolve_path(s, arg, vpath, sizeof(vpath));
             char real_to[FTP_PATH_SIZE];
             vpath_to_real(vpath, real_to, sizeof(real_to));
-            if (sceIoRename(s->rename_from, real_to) >= 0)
+            if (!fs_path_writable(s->rename_from) || !fs_path_writable(real_to))
+                net_send_resp(s->ctrl_sock, 550, "Read-only drive.");
+            else if (sceIoRename(s->rename_from, real_to) >= 0)
                 net_send_resp(s->ctrl_sock, 250, "Rename OK.");
             else
                 net_send_resp(s->ctrl_sock, 550, "Rename failed.");

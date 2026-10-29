@@ -28,6 +28,7 @@
 #include "filemanager.h"
 #include "draw.h"
 #include "menu.h"
+#include "fs_policy.h"
 
 /* ── Layout ──────────────────────────────────────────────────────────────── */
 #define FM_TITLE_H    46
@@ -56,12 +57,16 @@ static const Partition PARTITIONS[] = {
     { "uma0:",  "uma0: (Sony Memory Card)",    0 },
     { "imc0:",  "imc0: (Internal - Slim)",     0 },
     { "grw0:",  "grw0: (USB Mass Storage)",    0 },
-    { "vd0:",   "vd0:  (Savedata)",            0 },
-    { "vs0:",   "vs0:  (System Apps)",         1 },
-    { "os0:",   "os0:  (Kernel OS)",           1 },
-    { "sa0:",   "sa0:  (System Archive)",      1 },
-    { "tm0:",   "tm0:  (Temp)",                1 },
-    { "pd0:",   "pd0:  (Patch Data)",          1 },
+    { "xmc0:",  "xmc0: (Extra Memory Card)",   0 },
+    /* v1.1.9: system drives are always read-only (see fs_policy.c).
+     * vd0: was writable before; it holds the registry / system data. */
+    { "vd0:",   "vd0:  (System Data) [RO]",    1 },
+    { "vs0:",   "vs0:  (System Apps) [RO]",    1 },
+    { "os0:",   "os0:  (Kernel OS) [RO]",      1 },
+    { "sa0:",   "sa0:  (System Archive) [RO]", 1 },
+    { "tm0:",   "tm0:  (Temp) [RO]",           1 },
+    { "pd0:",   "pd0:  (Preinstalled) [RO]",   1 },
+    { "ud0:",   "ud0:  (Update) [RO]",         1 },
 };
 #define PARTITION_COUNT ((int)(sizeof(PARTITIONS) / sizeof(PARTITIONS[0])))
 
@@ -273,6 +278,7 @@ static void fm_build_fullpath(char *out, int out_sz,
 /* Copy single file — chunked */
 #define FM_CHUNK (64 * 1024)
 static int fm_copy_file(const char *src, const char *dst) {
+    if (!fs_path_writable(dst)) return -9;   /* v1.1.9 write policy */
     SceUID fdin  = sceIoOpen(src, SCE_O_RDONLY, 0);
     if (fdin < 0) return -1;
     SceUID fdout = sceIoOpen(dst, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0777);
@@ -291,6 +297,7 @@ static int fm_copy_file(const char *src, const char *dst) {
 /* Recursively delete a directory */
 static void fm_delete_recursive(const char *path, int depth) {
     if (depth > 16) return;
+    if (!fs_path_writable(path)) return;     /* v1.1.9 write policy */
     SceUID dir = sceIoDopen(path);
     if (dir < 0) { sceIoRemove(path); return; }
     SceIoDirent d;
@@ -335,15 +342,23 @@ static void fm_op_menu(const char *filepath, const char *name,
             /* Disable irrelevant ops */
             int disabled = 0;
             if (i == OP_VIEW   && is_dir)  disabled = 1;
-            if (i == OP_DELETE && readonly) disabled = 1;
-            if (i == OP_RENAME && readonly) disabled = 1;
+            int ro = readonly || !fs_path_writable(filepath);
+            if (i == OP_DELETE && ro) disabled = 1;
+            if (i == OP_RENAME && ro) disabled = 1;
 
             uint32_t col = disabled ? COLOR_DIM :
                            (i == sel ? COLOR_SELECTED : COLOR_TEXT);
             if (i == sel && !disabled)
                 display_rect(0, y - 2, SCREEN_W - 8,
                              FM_ROW_H + 2, COLOR_SEL_BG);
-            draw_text(MENU_X, y, col, OP_LABELS[i]);
+            if (disabled && (i == OP_DELETE || i == OP_RENAME)) {
+                /* v1.1.9: say WHY it is unavailable */
+                char lbl[48];
+                snprintf(lbl, sizeof(lbl), "%s  (read-only drive)", OP_LABELS[i]);
+                draw_text(MENU_X, y, col, lbl);
+            } else {
+                draw_text(MENU_X, y, col, OP_LABELS[i]);
+            }
             y += FM_ROW_H;
         }
 
@@ -377,7 +392,7 @@ static void fm_op_menu(const char *filepath, const char *name,
                 }
                 break;
             }
-            if (sel == OP_DELETE && !readonly) {
+            if (sel == OP_DELETE && !readonly && fs_path_writable(filepath)) {
                 char q[FM_NAME_MAX + 32];
                 snprintf(q, sizeof(q), "Delete %s?", name);
                 if (fm_confirm(q)) {
@@ -407,7 +422,7 @@ static void fm_op_menu(const char *filepath, const char *name,
 
 /* ── Create folder ───────────────────────────────────────────────────────── */
 static void fm_create_folder(void) {
-    if (g_cwd_readonly) {
+    if (g_cwd_readonly || (g_cwd[0] && !fs_path_writable(g_cwd))) {
         fm_message("Read-only partition - cannot create folder.", COLOR_RED);
         return;
     }

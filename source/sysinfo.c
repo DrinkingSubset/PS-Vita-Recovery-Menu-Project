@@ -8,11 +8,14 @@
 #include <psp2/power.h>
 #include <psp2/kernel/sysmem.h>
 #include <psp2/kernel/modulemgr.h>
+#include <psp2/io/stat.h>
+#include <psp2/io/dirent.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include "sysinfo.h"
 #include "compat.h"
+#include "fs_policy.h"
 #include "draw.h"
 #include "menu.h"
 
@@ -106,7 +109,7 @@ void sysinfo_draw(void *font, int scroll_y) {
                 snprintf(fwbuf, sizeof(fwbuf), "%s", g_compat.fw_display);
             }
         } else {
-            snprintf(fwbuf, sizeof(fwbuf), "%s  (os0 unreadable)",
+            snprintf(fwbuf, sizeof(fwbuf), "%s  (may be spoofed)",
                      g_compat.fw_display);
             fcol = COLOR_YELLOW;
         }
@@ -220,11 +223,54 @@ void sysinfo_draw(void *font, int scroll_y) {
     SECTION("-- Detection debug --");
     ROWF("Model src:", COLOR_DIM, "reg=%d cdlg=%d imc0=%d",
          g_compat.dbg_imc0_stat, g_compat.dbg_wwan, g_compat.dbg_imc0_dopen);
-    ROWF("Board src:", COLOR_DIM, "hwinfo ret=0x%08X",
-         (unsigned int)g_compat.dbg_hw_ret);
-    ROWF("FW src:", COLOR_DIM, "os0 ret=%d  syscall=%s",
-         g_compat.dbg_os0_ret,
+    ROWF("Board src:", COLOR_DIM, "hwinfo ret=0x%08X  %02X %02X %02X %02X",
+         (unsigned int)g_compat.dbg_hw_ret,
+         g_compat.dbg_hwinfo[0], g_compat.dbg_hwinfo[1],
+         g_compat.dbg_hwinfo[2], g_compat.dbg_hwinfo[3]);
+    ROWF("FW src:", COLOR_DIM, "raw=%d mod=%s vsh=%s sys=%s",
+         g_compat.dbg_os0_ret, g_compat.dbg_fw_self, g_compat.dbg_fw_vsh,
          g_compat.fw_reported[0] ? g_compat.fw_reported : "?");
+
+    DIVIDER();
+
+    /* ── DRIVE ACCESS (v1.1.9 unsafe build) ─────────────────────────────
+     * What this app can see, and whether File Manager / FTP may write.
+     * RW = user storage, RO = protected system drive (fs_policy.c). */
+    SECTION("-- Drive access --");
+    {
+        /* Probed once and cached: this screen redraws every frame */
+        static const char *const DRV[] = {
+            "ux0:", "ur0:", "uma0:", "imc0:", "xmc0:", "grw0:",
+            "os0:", "vs0:", "sa0:", "pd0:", "tm0:", "ud0:", "vd0:",
+        };
+        enum { NDRV = sizeof(DRV) / sizeof(DRV[0]) };
+        static int probed = 0, seen[NDRV], appdb = 0;
+        if (!probed) {
+            for (int i = 0; i < NDRV; i++) {
+                SceIoStat st;
+                seen[i] = sceIoGetstat(DRV[i], &st) >= 0;
+                if (!seen[i]) {
+                    SceUID d = sceIoDopen(DRV[i]);
+                    if (d >= 0) { seen[i] = 1; sceIoDclose(d); }
+                }
+            }
+            SceIoStat st;
+            appdb = sceIoGetstat("ur0:shell/db/app.db", &st);
+            probed = 1;
+        }
+        char line[96] = "";
+        int n = 0;
+        for (int i = 0; i < NDRV; i++) {
+            char item[16];
+            snprintf(item, sizeof(item), "%s%s  ", DRV[i],
+                     !seen[i] ? "--" : (fs_path_writable(DRV[i]) ? "RW" : "RO"));
+            strncat(line, item, sizeof(line) - strlen(line) - 1);
+            if (++n == 5) { ROWTEXT(line, COLOR_DIM); line[0] = '\0'; n = 0; }
+        }
+        if (line[0]) ROWTEXT(line, COLOR_DIM);
+        if (appdb >= 0) ROW("app.db:", "readable (unsafe access OK)", COLOR_GREEN);
+        else ROWF("app.db:", COLOR_YELLOW, "not visible 0x%08X", (unsigned int)appdb);
+    }
 
     /* No-Ensō warning box */
     if (!g_compat.has_enso &&

@@ -49,7 +49,10 @@ typedef struct {
     char      fw_reported[16];   /* version the syscall reports ("" if none) */
     int       fw_from_os0;       /* 1 = version read from os0 partition      */
     int       dbg_os0_ret;       /* read_fw_from_partition() result          */
+    char      dbg_fw_self[16];   /* v1.1.9: version from an os0 module header */
+    char      dbg_fw_vsh[16];    /* v1.1.9: version from _vshSblGetSystemSwVersion */
     int       dbg_hw_ret;        /* _vshSysconGetHardwareInfo() result       */
+    unsigned char dbg_hwinfo[4]; /* v1.1.9: raw hardware info bytes */
     char      motherboard[32];   /* e.g. "IRS-1001 (3G)"             */
     int       has_imc0;          /* 1 if imc0: accessible             */
     int       has_enso;          /* 1 if Ensō boot_config present     */

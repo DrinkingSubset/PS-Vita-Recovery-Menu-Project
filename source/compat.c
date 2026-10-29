@@ -83,6 +83,58 @@ static int read_fw_from_partition(char *out, int out_sz,
 }
 
 /*
+ * v1.1.9: real firmware from the header of a system module on os0:.
+ * Every signed system module (SELF) carries the system software version it
+ * was built for in its app-info block, e.g. 0x0365000000000000 for 3.65.
+ * os0: holds the modules of the INSTALLED firmware, and HENkaku's version
+ * spoofing does not touch these files, so this shows the real version.
+ * os0: is readable from the unsafe build (read only).
+ */
+static int bcd_ok(unsigned v) { return (v & 0xF) <= 9 && ((v >> 4) & 0xF) <= 9; }
+
+static int read_fw_from_os0_module(char *out, int out_sz, unsigned int *num_out) {
+    static const char *const MODS[] = {
+        "os0:kd/sysmem.skprx", "os0:kd/modulemgr.skprx",
+        "os0:kd/iofilemgr.skprx", "os0:psp2bootconfig.skprx",
+    };
+    for (unsigned m = 0; m < sizeof(MODS) / sizeof(MODS[0]); m++) {
+        SceUID fd = sceIoOpen(MODS[m], SCE_O_RDONLY, 0);
+        if (fd < 0) continue;
+        unsigned char h[0x200];
+        int r = sceIoRead(fd, h, sizeof(h));
+        sceIoClose(fd);
+        if (r < 0x60 || h[0] != 'S' || h[1] != 'C' || h[2] != 'E' || h[3] != 0)
+            continue;
+        /* SCE header: appinfo_offset is the u64 at 0x38 (normally 0x80) */
+        unsigned int ai = h[0x38] | (h[0x39] << 8) | (h[0x3A] << 16) | (h[0x3B] << 24);
+        if (ai + 0x18 > (unsigned)r) continue;
+        /* appinfo: authid u64, vendor u32, self_type u32, version u64 (+0x10) */
+        unsigned char major = h[ai + 0x10 + 7], minor = h[ai + 0x10 + 6];
+        if (major != 0x03 || !bcd_ok(minor)) continue;
+        unsigned int num = 300 + (minor >> 4) * 10 + (minor & 0xF);
+        if (num < 300 || num > 374) continue;
+        snprintf(out, out_sz, "3.%02u", num - 300);
+        if (num_out) *num_out = num;
+        return 0;
+    }
+    return -1;
+}
+
+/* v1.1.9: ask the VSH bridge (unsafe builds only); may or may not be spoofed */
+static int read_fw_from_vsh(char *out, int out_sz, unsigned int *num_out) {
+    SceKernelFwInfo fw;
+    memset(&fw, 0, sizeof(fw));
+    fw.size = sizeof(fw);
+    if (_vshSblGetSystemSwVersion(&fw) < 0 || !fw.versionString[0]) return -1;
+    unsigned int maj = 0, min_raw = 0;
+    if (sscanf(fw.versionString, "%u.%u", &maj, &min_raw) != 2 || maj == 0) return -2;
+    unsigned int minor = (min_raw >= 100) ? min_raw / 10 : min_raw;
+    snprintf(out, out_sz, "%u.%02u", maj, minor);
+    if (num_out) *num_out = maj * 100 + minor;
+    return 0;
+}
+
+/*
  * build_motherboard_from_hwinfo() — parse raw syscon hardware info bytes.
  * hwinfo[2] = board code, hwinfo[0] bit 0–3 = variant (0x02 = 3G).
  * Only succeeds when _vshSysconGetHardwareInfo works (VSH/kernel context).
@@ -111,8 +163,13 @@ static int build_motherboard_from_hwinfo(char *out, int out_sz,
     }
     if (!board) return -1;   /* unknown code — caller should fall back */
 
-    int is_3g = ((hwinfo[0] & 0x0F) == 0x02);
-    if (is_3g)
+    /* 3G: low nibble of hwinfo[0] == 0x02, or an IRT board code.
+     * Confirmed on two PCH-1101 (3G) units: hwinfo 02 60 40 00. So board
+     * code 0x40 on a 3G unit is the 3G board of that revision (IRT-002). */
+    int is_3g = ((hwinfo[0] & 0x0F) == 0x02) || hwinfo[2] == 0x31 || hwinfo[2] == 0x41;
+    if (is_3g && strncmp(board, "IRS-00", 6) == 0)
+        snprintf(out, out_sz, "IRT-%s (3G)", board + 4);
+    else if (is_3g && strncmp(board, "IRT-", 4) == 0)
         snprintf(out, out_sz, "%s (3G)", board);
     else
         snprintf(out, out_sz, "%s", board);
@@ -242,6 +299,35 @@ void compat_init(void) {
             }
         }
 
+        /* v1.1.9: Source C - version stamped in an os0 system module
+         * (not affected by spoofing). Source D - VSH bridge. Both are kept
+         * for the debug line; C is trusted, D only if it differs from the
+         * spoofable syscall (a spoofed D would equal the syscall). */
+        {
+            char sd[16] = "", vd[16] = "";
+            unsigned int sn = 0, vn = 0;
+            int sr = read_fw_from_os0_module(sd, sizeof(sd), &sn);
+            int vr = read_fw_from_vsh(vd, sizeof(vd), &vn);
+            snprintf(c->dbg_fw_self, sizeof(c->dbg_fw_self), "%s", sr == 0 ? sd : "-");
+            snprintf(c->dbg_fw_vsh,  sizeof(c->dbg_fw_vsh),  "%s", vr == 0 ? vd : "-");
+            if (!fw_found && sr == 0) {
+                ver_num = sn;
+                snprintf(c->fw_display, sizeof(c->fw_display), "%s", sd);
+                snprintf(c->fw_string,  sizeof(c->fw_string),  "%s", sd);
+                c->fw_from_os0 = 1;
+                fw_found = 1;
+            }
+            /* Tested on a 3.65 Enso slim with spoofing on: vsh=3.65 while the
+             * syscall said 3.74, so the VSH bridge returns the real version. */
+            if (!fw_found && vr == 0 && vn >= 300 && vn <= 374) {
+                ver_num = vn;
+                snprintf(c->fw_display, sizeof(c->fw_display), "%s", vd);
+                snprintf(c->fw_string,  sizeof(c->fw_string),  "%s", vd);
+                c->fw_from_os0 = 1;   /* "real" source: show the mismatch note */
+                fw_found = 1;
+            }
+        }
+
         /* Fall back to the syscall value */
         if (!fw_found && rep_num) {
             ver_num = rep_num;
@@ -284,8 +370,10 @@ void compat_init(void) {
 
     /* ── 3. Model + motherboard ──────────────────────────────────────────
      *
-     * All VSH/PsCode calls fail from bubble app context. Detection is
-     * purely filesystem-based. PCH-2000 and PSTV have imc0: internal
+     * Safe builds (up to v1.1.8): VSH/PsCode calls fail from bubble app
+     * context, so detection was filesystem/registry based (and wrong on
+     * some slims). v1.1.9 is built UNSAFE: _vshSysconGetHardwareInfo is
+     * tried first and its board code wins when it works. PCH-2000 and PSTV have imc0: internal
      * storage; PCH-1000/1100 do not.
      *
      * drive_exists() tries both sceIoGetstat() and sceIoDopen() since
@@ -295,6 +383,7 @@ void compat_init(void) {
     unsigned char hwinfo[4] = {0};
     int hw_ok = _vshSysconGetHardwareInfo(hwinfo);
     c->dbg_hw_ret = hw_ok;
+    memcpy(c->dbg_hwinfo, hwinfo, sizeof(c->dbg_hwinfo));
 
     /* ── Model detection — three methods, best-wins priority ────────────
      *
@@ -357,6 +446,23 @@ void compat_init(void) {
                     (drive_exists("psglobal:") ? MODEL_PSTV : MODEL_VITA_2000)
                     : MODEL_VITA_1000;
                 break;
+        }
+    }
+
+    /* v1.1.9 (unsafe build): the hardware info call can now succeed. Its
+     * board code is the most reliable source, so it overrides the guesses
+     * above: USS = PCH-2000, DOL = PS TV, IRT = PCH-1100 (3G), IRS = 1000. */
+    if (hw_ok == 0) {
+        switch (hwinfo[2]) {
+            case 0x80: case 0x82:             c->model = MODEL_VITA_2000;    break;
+            case 0x70: case 0x72:             c->model = MODEL_PSTV;         break;
+            case 0x31: case 0x41:             c->model = MODEL_VITA_1000_3G; break;
+            case 0x10: case 0x40: case 0x60:
+                /* same board family for Wi-Fi and 3G; 3G flag decides */
+                c->model = ((hwinfo[0] & 0x0F) == 0x02) ? MODEL_VITA_1000_3G
+                                                        : MODEL_VITA_1000;
+                break;
+            default: break;   /* unknown code: keep the earlier result */
         }
     }
 
