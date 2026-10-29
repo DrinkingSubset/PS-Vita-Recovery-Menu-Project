@@ -3,6 +3,17 @@
 By DrinkingSubset. Newest version first. Copy a version's block straight into
 the GitHub release notes.
 
+## v1.1.9
+> **Requires HENkaku Settings > "Enable Unsafe Homebrew" to be ticked** (the same setting VitaShell needs). Without it the app will not launch. No boot plugin changes — just install the VPK.
+
+- **The app is now built as "unsafe" homebrew.** It can read all system drives, which is needed for correct System Info (and for layout backup/restore planned for v1.2.0).
+- **System Info – real firmware:** now asks the system's VSH bridge, which returns the real version even with HENkaku's Version Spoofing on (tested: 3.65 Enso slim spoofed to 3.74 now shows "3.65 (system reports 3.74)"). The firmware tier is now correct too, so screens that depend on it (like the Rebuild Database Enso note) no longer get a spoofed value. The debug line shows every source: `raw` (partition), `mod` (os0 module header), `vsh`, `sys`.
+- **System Info – model and motherboard:** taken from the hardware info chip when available (USS = PS Vita 2000, IRS = 1000, IRT = 1100 3G, DOL = PS TV). This fixes the Slim 2000 showing as "1000 (OLED)" (tested: USS-1002), and 3G units now show as "PS Vita 1100 (3G OLED)" with an IRT-002 (3G) board (tested on two PCH-1101).
+- **New "Drive access" section in System Info:** shows which drives the app can see and whether they are RW or RO, plus whether `app.db` is readable. The Detection debug section also shows the raw hardware info bytes.
+- **Write protection for system drives:** File Manager and the FTP server can read every drive but can only **write** to user storage (`ux0: ur0: uma0: imc0: xmc0: grw0:`). `os0: vs0: sa0: pd0: tm0: ud0: vd0:` and raw devices are always read-only (upload, delete, rename, new folder are refused). Before, File Manager allowed writes to `vd0:`, and FTP had no checks.
+- FTP lists the system drives too (read-only), and a small handle leak when listing drives is fixed.
+- File Manager: on read-only drives, Delete and Rename are greyed out and labelled "(read-only drive)".
+
 ## v1.1.8
 - **New: Plugin Fix Mode > Undo Safe Mode.** Puts back your exact config from before Safe Mode ran, including plugins you had deliberately turned off. Safe Mode now keeps that copy every time it runs: in Plugin Fix, at L-trigger boot (`<config>.before_safemode`), and in Restore / Unbrick (`tai_backup/<drive>_config_before_safemode.txt`). Undo uses the newest one.
 - Running Safe Mode a second time no longer overwrites that copy with the already-disabled config. Plugin Fix tells you when Safe Mode is already active.

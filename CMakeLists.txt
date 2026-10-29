@@ -84,6 +84,7 @@ add_executable(${PROJECT_NAME}
     source/ftp_server.c
     source/update.c
     source/https.c
+    source/fs_policy.c
 )
 
 add_custom_target(boot_plugins ALL
@@ -157,7 +158,10 @@ target_link_libraries(${PROJECT_NAME}
     c
 )
 
-vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME})
+# v1.1.9: built as UNSAFE homebrew (needs HENkaku "Enable Unsafe Homebrew").
+# This lets the app read system drives (real firmware version, hardware info,
+# ur0:shell). Writes stay limited by source/fs_policy.c.
+vita_create_self(${PROJECT_NAME}.self ${PROJECT_NAME} UNSAFE)
 
 # ── Step 4: Package everything into the VPK ───────────────────────────────
 vita_create_vpk(${PROJECT_NAME}.vpk ${VITA_TITLEID} ${PROJECT_NAME}.self

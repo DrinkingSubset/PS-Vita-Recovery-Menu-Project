@@ -82,7 +82,7 @@ The creator and developer of PS Vita Recovery Menu (**DrinkingSubset**) is **not
 
 ---
 
-## PS Vita Recovery Menu v1.1.8
+## PS Vita Recovery Menu v1.1.9
 
 A custom recovery environment for the PS Vita (and PSTV) running HENkaku / h-encore / Ensō.
 Hold R at power-on to boot directly into the recovery menu (Ensō required for boot entry).
@@ -142,10 +142,10 @@ Safe Mode, **Undo Safe Mode** (puts back your exact config from before Safe Mode
 Card & config info, mount point switching, StorageMgr install, format tools.
 
 ### File Manager
-Partition browser with folder and file operations. System partitions (`os0:`, `vs0:`) are read-only.
+Partition browser with folder and file operations. Reads every drive; writes only to user storage (`ux0: ur0: uma0: imc0: xmc0: grw0:`). System drives are read-only.
 
 ### FTP Server
-Transfer files over Wi-Fi from your PC. There is no password, so use it on a network you trust.
+Transfer files over Wi-Fi from your PC. System drives are listed read-only. There is no password, so use it on a network you trust.
 
 ### Cheat Manager
 Vita native cheats and PSP CWCheat (.db) support.
@@ -158,6 +158,8 @@ Checks this GitHub repository for the latest release and downloads the `.vpk` to
 ## Installation
 
 Jailbreak required: HENkaku / h-encore / h-encore2 on firmware 3.60–3.74. Boot-time recovery (hold R) and Rebuild Database need Ensō.
+
+**Since v1.1.9 the app is "unsafe" homebrew:** tick **HENkaku Settings → Enable Unsafe Homebrew** (VitaShell needs the same setting). It can then read every drive, but only writes to user storage; system drives (`os0: vs0: sa0: pd0: tm0: ud0: vd0:`) stay read-only.
 
 1. Download the latest `VitaRecovery_vX.Y.Z.vpk` from the Releases page.
 2. Install via VitaShell.
@@ -248,7 +250,7 @@ flowchart TD
 
 ## Safety Features
 
-- `os0:` / `vs0:` are never written. File Manager shows them read-only.
+- System drives (`os0: vs0: sa0: pd0: tm0: ud0: vd0:`) are never written: File Manager and FTP only write to user storage (allowlist in `source/fs_policy.c`).
 - Plugin manager, Plugin Fix, Restore / Unbrick and the Boot Recovery Installer all back up the config before changing it, write to a temporary file, read it back to check it, and only then replace the original (the old file is kept as `.old` until the swap succeeds).
 - Safe Mode and Reset keep HENkaku, SD2Vita and boot recovery plugins enabled, so ux0: and this menu stay reachable.
 - Confirmation screens need a fresh button press (a held X cannot skip them).
@@ -260,7 +262,7 @@ flowchart TD
 
 ## Known Issues
 
-- PS Vita 2000 (Slim): System Info shows the wrong model name, firmware (3.73 instead of 3.65) and motherboard. This needs privileged access to fix and is under investigation.
+- PS Vita 2000 (Slim): before v1.1.9, System Info showed the wrong model, firmware (the spoofed 3.73) and motherboard. v1.1.9 reads them with unsafe access; please report if anything is still wrong.
 - Boot recovery (hold R) and Rebuild Database do not work on h-encore / h-encore2 without Ensō, because taiHEN does not load at cold boot there. Launching the app from its bubble works on all firmware versions.
 - PS TV: the R trigger at boot is not confirmed to work (no tester yet).
 - Custom boot splash + holding R could cause a boot loop on older versions. v1.1.7 adds time limits and a loop breaker; feedback welcome.
