@@ -3,6 +3,19 @@
 By DrinkingSubset. Newest version first. Copy a version's block straight into
 the GitHub release notes.
 
+## v1.2.0
+> **After installing, open Advanced > Boot Recovery > Install / Update Boot Recovery, then reboot.** The kernel boot plugin changed (it applies layout restores). The app now reminds you of this when it starts. "Enable Unsafe Homebrew" must stay ticked.
+
+- **New: Home Screen Layout** (main menu). Back up and restore your home screen: pages, folders (with their names and icons) and bubble order.
+  - **Back Up Layout** copies `ur0:shell/db/app.db` to `ux0:data/vita_recovery/layout/app.db` and checks the copy with SQLite before it replaces the old backup. The backup before it is kept as `app.db.prev` ("Older" on screen). If nothing changed since the last backup, nothing is rotated.
+  - **Restore Latest / Older Backup** builds the restored database on a copy (the live `app.db` is never edited), shows what will happen (apps put back, apps no longer installed, new apps added at the end) and restarts the Vita. Early in the next boot the boot plugin swaps it in and keeps the replaced database as `ur0:shell/db/app.db.prelayout`. The result is shown on the main menu.
+  - Each page's look (wave colour / background) comes back from the backup too.
+  - Apps installed after the backup are added after the last bubble; apps no longer installed are skipped; a folder whose apps are all gone is left out.
+- **Rebuild Database now backs up your layout first**, so you can put folders and bubble order back afterwards with Home Screen Layout > Restore Latest Backup.
+- **New: boot plugin update reminder.** When the app starts (or you come back to the main menu from another screen) and the boot plugins on the Vita are older than the ones inside the app (or only partly installed), a pop-up explains it and offers to open Boot Recovery right away. Choose "Later" and the main menu shows a reminder line until they are updated. Nothing is shown if Boot Recovery was never installed.
+- Uses the Vita's own SQLite module (no extra library). Works with Ensō only (like Rebuild Database).
+- Tested on a PS Vita 2000 and two PCH-1101 3G (3.60 / 3.65 Ensō, all with SD2Vita): Rebuild Database, then Restore Latest Backup brought back all folders, bubble order and the wave colour. The update reminder was tested by removing a plugin file (pop-up on the main menu, then repaired with Install / Update).
+
 ## v1.1.9
 > **Requires HENkaku Settings > "Enable Unsafe Homebrew" to be ticked** (the same setting VitaShell needs). Without it the app will not launch. No boot plugin changes — just install the VPK.
 

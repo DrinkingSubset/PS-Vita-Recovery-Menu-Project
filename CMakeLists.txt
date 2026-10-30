@@ -85,6 +85,9 @@ add_executable(${PROJECT_NAME}
     source/update.c
     source/https.c
     source/fs_policy.c
+    source/vita_sqlite.c
+    source/layout_core.c
+    source/layout.c
 )
 
 add_custom_target(boot_plugins ALL
@@ -150,6 +153,7 @@ target_link_libraries(${PROJECT_NAME}
     SceNet_stub
     SceNetCtl_stub
     SceHttp_stub
+    SceSqlite_stub
     mbedtls
     mbedx509
     mbedcrypto

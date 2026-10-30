@@ -82,7 +82,7 @@ The creator and developer of PS Vita Recovery Menu (**DrinkingSubset**) is **not
 
 ---
 
-## PS Vita Recovery Menu v1.1.9
+## PS Vita Recovery Menu v1.2.0
 
 A custom recovery environment for the PS Vita (and PSTV) running HENkaku / h-encore / Ensō.
 Hold R at power-on to boot directly into the recovery menu (Ensō required for boot entry).
@@ -100,6 +100,7 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 * Restore / Unbrick
 * Plugin Fix Mode
 * Sony Recovery
+* Home Screen Layout
 * Storage Manager
 * File Manager
 * FTP Server
@@ -133,10 +134,17 @@ Safe Mode, **Undo Safe Mode** (puts back your exact config from before Safe Mode
 
 ### Sony Recovery
 * Restart System
-* **Rebuild Database**: the app is a safe homebrew and cannot touch `ur0:shell`, so it asks the boot plugin to do it. At the next boot, before the home screen starts, `boot_recovery.skprx` renames `app.db` to `app.db.bak` and the system rebuilds the database. Folders and bubble order are reset (you are warned twice first); games, apps and saves are kept. Requires Ensō and the current boot plugin.
+* **Rebuild Database**: the database can't be replaced safely while the home screen is using it, so the app asks the boot plugin to do it. At the next boot, before the home screen starts, `boot_recovery.skprx` renames `app.db` to `app.db.bak` and the system rebuilds the database. Folders and bubble order are reset (you are warned twice first); games, apps and saves are kept. **Since v1.2.0 your home screen layout is backed up first**, so you can put it back afterwards with Home Screen Layout. Requires Ensō and the current boot plugin.
 * Format Memory Card (3-step confirm, keeps `ux0:tai/`)
 * Restore PS Vita System: a guide to Sony's own Safe Mode factory reset. This app cannot factory reset the Vita itself.
 * Update System Software (from `ux0:update/PSP2UPDAT.PUP`)
+
+### Home Screen Layout
+Back up and restore your home screen: pages, folders (with their names and icons), bubble order and each page's wave colour.
+* **Back Up Layout**: copies `ur0:shell/db/app.db` to `ux0:data/vita_recovery/layout/app.db` and checks the copy before it replaces the old backup. The backup before it is kept too ("Older"). Nothing is rotated if the layout hasn't changed.
+* **Restore Latest Backup / Restore Older Backup**: builds the restored layout on a copy (the live database is never edited), shows what will happen, then restarts the Vita. Early in the next boot the boot plugin swaps it in and keeps the replaced database as `ur0:shell/db/app.db.prelayout`. Apps no longer installed are skipped; apps installed after the backup are added after the last bubble.
+* Typical use: Sony Recovery → Rebuild Database (it backs up your layout first), reboot, then Home Screen Layout → Restore Latest Backup.
+* Requires Ensō and the current boot plugin. Uses the Vita's own SQLite module.
 
 ### Storage Manager (SD2Vita)
 Card & config info, mount point switching, StorageMgr install, format tools.
@@ -157,7 +165,7 @@ Checks this GitHub repository for the latest release and downloads the `.vpk` to
 
 ## Installation
 
-Jailbreak required: HENkaku / h-encore / h-encore2 on firmware 3.60–3.74. Boot-time recovery (hold R) and Rebuild Database need Ensō.
+Jailbreak required: HENkaku / h-encore / h-encore2 on firmware 3.60–3.74. Boot-time recovery (hold R), Rebuild Database and Home Screen Layout restore need Ensō.
 
 **Since v1.1.9 the app is "unsafe" homebrew:** tick **HENkaku Settings → Enable Unsafe Homebrew** (VitaShell needs the same setting). It can then read every drive, but only writes to user storage; system drives (`os0: vs0: sa0: pd0: tm0: ud0: vd0:`) stay read-only.
 
@@ -168,6 +176,7 @@ Jailbreak required: HENkaku / h-encore / h-encore2 on firmware 3.60–3.74. Boot
    - Copies `boot_recovery.skprx` and `boot_trigger.suprx` to your active tai folder.
    - Adds both entries to your active tai config (a backup is created first).
    - Already installed? The same option updates the plugin files to the version in the app. Do this after every app update, then reboot.
+   - Since v1.2.0 the app checks this when it starts and whenever you return to the main menu: if the installed plugins are older than the app's (or incomplete), it shows a pop-up that takes you straight to Boot Recovery.
 5. Reboot holding R to enter the recovery menu. Hold L instead to also apply Safe Mode (non-essential plugins disabled) before the menu opens.
 
 ---
@@ -204,13 +213,17 @@ boot_recovery.skprx  (kernel plugin, loaded under *KERNEL)
 boot_trigger.suprx   (user plugin, loaded under *main)
 ```
 
-**What happens at boot (v1.1.7):**
+**What happens at boot (v1.2.0):**
 
 ```mermaid
 flowchart TD
     A[Power On] --> B[taiHEN loads *KERNEL plugins]
     B --> C[boot_recovery.skprx starts a thread]
-    C --> D{Rebuild Database requested?}
+    C --> LR{Layout restore requested?}
+    LR -->|Yes, early boot| LS[app.db to app.db.prelayout, app.db.new to app.db, write result file]
+    LR -->|No| D
+    LS --> D
+    D{Rebuild Database requested?}
     D -->|Yes, early boot| E[Rename app.db to app.db.bak, write result file]
     D -->|No| F[Clear flags left from an earlier boot]
     E --> F
@@ -241,10 +254,11 @@ flowchart TD
 
 | Device | Firmware | CFW |
 |--------|----------|-----|
-| PS Vita PCH-1000 (3G) | 3.65 | Ensō |
-| PS Vita PCH-1101 | 3.60 | HENkaku |
-| PS Vita PCH-1101 | 3.74 | h-encore2 |
+| PS Vita PCH-1101 (3G) | 3.60 | Ensō + SD2Vita |
+| PS Vita PCH-1101 (3G) | 3.65 | Ensō + SD2Vita |
 | PS Vita PCH-2001 Slim | 3.65 | Ensō + SD2Vita |
+
+All testing so far used SD2Vita. Sony memory cards are not tested yet; reports welcome.
 
 ---
 
@@ -254,7 +268,8 @@ flowchart TD
 - Plugin manager, Plugin Fix, Restore / Unbrick and the Boot Recovery Installer all back up the config before changing it, write to a temporary file, read it back to check it, and only then replace the original (the old file is kept as `.old` until the swap succeeds).
 - Safe Mode and Reset keep HENkaku, SD2Vita and boot recovery plugins enabled, so ux0: and this menu stay reachable.
 - Confirmation screens need a fresh button press (a held X cannot skip them).
-- Rebuild Database keeps the previous database as `ur0:shell/db/app.db.bak` and never runs while the home screen is using it.
+- Rebuild Database keeps the previous database as `ur0:shell/db/app.db.bak` and never runs while the home screen is using it. It backs up your home screen layout first.
+- Home Screen Layout never edits the live database: the restore is built and checked on a copy, swapped in by the boot plugin before the home screen starts, and the replaced database is kept as `app.db.prelayout`. If the swap fails, the original is put back.
 - L-trigger at boot applies safe mode (disables non-essential plugins) before the menu opens.
 - Boot loop breaker in the boot plugin (see above).
 
@@ -262,8 +277,7 @@ flowchart TD
 
 ## Known Issues
 
-- PS Vita 2000 (Slim): before v1.1.9, System Info showed the wrong model, firmware (the spoofed 3.73) and motherboard. v1.1.9 reads them with unsafe access; please report if anything is still wrong.
-- Boot recovery (hold R) and Rebuild Database do not work on h-encore / h-encore2 without Ensō, because taiHEN does not load at cold boot there. Launching the app from its bubble works on all firmware versions.
+- Boot recovery (hold R), Rebuild Database and Home Screen Layout restore do not work on h-encore / h-encore2 without Ensō, because taiHEN does not load at cold boot there. Launching the app from its bubble works on all firmware versions.
 - PS TV: the R trigger at boot is not confirmed to work (no tester yet).
 - Custom boot splash + holding R could cause a boot loop on older versions. v1.1.7 adds time limits and a loop breaker; feedback welcome.
 - The FTP server has no password.
@@ -272,10 +286,9 @@ flowchart TD
 
 ## Future Plans
 
-- Back up and restore the home screen layout (folders and bubble order) around Rebuild Database
 - Crash triage screen and an opt-in diagnostic report file
 - Danger confirmations with a countdown
-- Vita 2000 model / firmware detection fix
+- Home Screen Layout: put new apps into a folder when all 10 pages are full (a restore is refused today), and an "Undo last restore" option
 - PS TV boot trigger support
 - Live taiHEN module reload
 - Per-TitleID CPU clock profiles
