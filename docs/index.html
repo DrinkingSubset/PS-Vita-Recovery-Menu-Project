@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#003c00">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="description" content="PS Vita Recovery Menu: what's left to fix and every feature done since v1.0.8.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Vita Recovery Checklist</title>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one reading column; "To fix" first (actionable), then version history v1.2.0 -> v1.0.8 as checked lists */
+:root {
+  --bg: #f6f8f4; --surface: #ffffff; --fg: #18211a; --muted: #5d6b60; --line: #d9e1d8;
+  --accent: #1f7a2e; --accent-soft: #e3f1e2; --title: #003c00; --title-fg: #eaffea; --warn: #9a5b00; --warn-soft: #fbefd9;
+  --f-display: "Silkscreen", "Courier New", monospace;
+  --f-body: "Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1410; --surface: #151d17; --fg: #e3ece2; --muted: #93a596; --line: #263229;
+  --accent: #5fd36f; --accent-soft: #1b2e1e; --title: #0b3d10; --title-fg: #d8ffd8; --warn: #f0b04a; --warn-soft: #2e2413; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0e1410; --surface: #151d17; --fg: #e3ece2; --muted: #93a596; --line: #263229;
+  --accent: #5fd36f; --accent-soft: #1b2e1e; --title: #0b3d10; --title-fg: #d8ffd8; --warn: #f0b04a; --warn-soft: #2e2413; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font: 16px/1.55 var(--f-body); }
+.wrap { max-width: 760px; margin: 0 auto; padding-block: 0 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar { background: var(--title); color: var(--title-fg); border-bottom: 3px solid var(--accent);
+  padding-block: 18px 16px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.bar-in { max-width: 760px; margin: 0 auto; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; align-items: baseline; }
+.bar h1 { font: 400 clamp(17px, 3.4vw, 22px)/1.2 var(--f-display); margin: 0; letter-spacing: .02em; }
+.bar .by { font: 400 13px var(--f-display); opacity: .85; }
+.summary { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 20px 0 8px; color: var(--muted); font-size: 15px; }
+.summary b { color: var(--fg); font-variant-numeric: tabular-nums; }
+h2 { font: 700 13px/1 var(--f-body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 36px 0 12px; }
+.ver { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; margin-bottom: 12px; }
+.ver > summary { list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding: 12px 14px; }
+.ver > summary::-webkit-details-marker { display: none; }
+.ver > summary:focus-visible, label:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tag { font: 600 14px var(--f-mono); color: var(--accent); min-width: 4.2em; }
+.vt { font-weight: 600; flex: 1 1 260px; min-width: 0; }
+.st { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chev { color: var(--muted); font: 400 12px var(--f-mono); }
+.ver[open] .chev { transform: rotate(90deg); }
+ul { list-style: none; margin: 0; padding: 0 14px 12px; display: grid; gap: 6px; }
+li label { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; cursor: pointer; }
+li input { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--accent); }
+li .t { min-width: 0; }
+li.done .t { color: var(--fg); }
+li input:checked + .t.todo-t { color: var(--muted); text-decoration: line-through; }
+code { font: 13px var(--f-mono); background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.pill { font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: .06em; padding: 2px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); }
+.pill.w { background: var(--warn-soft); color: var(--warn); }
+.todo .ver { border-left: 4px solid var(--warn); }
+.note { color: var(--muted); font-size: 14px; margin: 4px 0 0; }
+@media (prefers-reduced-motion: no-preference) { .chev { transition: transform .15s; } }
+</style>
+<style>
+/* standalone app additions */
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; min-height: 100vh; }
+*, *::before, *::after { box-sizing: border-box; }
+.bar { padding-top: calc(18px + env(safe-area-inset-top, 0px)); }
+.wrap { padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px)); }
+</style>
+</head>
+<body>
+<header class="bar"><div class="bar-in"><h1>PS Vita Recovery Menu v1.2.0</h1><span class="by">By DrinkingSubset</span></div></header>
+
+<main class="wrap">
+  <div class="summary" id="summary"></div>
+  <p class="note">Tick items in "To fix" as you finish them. Ticks are saved in this browser only.</p>
+
+  <section class="todo">
+    <h2>To fix and to do</h2>
+    <div id="todo"></div>
+  </section>
+
+  <section>
+    <h2>Done since v1.0.8</h2>
+    <div id="done"></div>
+  </section>
+</main>
+
+<script>
+const TODO = [
+  { group: "Bugs", pill: "Bug", items: [
+    ["fm-view", "File Manager: every file says <b>\"File too large to view\"</b> (reported on v1.1.9)."],
+    ["diag-henkaku", "Boot Diagnostics shows a false \"HENkaku file missing\"."],
+  ]},
+  { group: "Needs testing", pill: "Test", items: [
+    ["sony-card", "Test everything with an official Sony memory card (all testing so far used SD2Vita)."],
+    ["splash-loop", "Confirm the custom boot splash + hold R boot loop is gone since v1.1.7 (reported by That Which I Have Known)."],
+    ["pstv", "PS TV: hold R at boot is unconfirmed (needs a tester)."],
+    ["update-avail", "Optional: see the \"UPDATE AVAILABLE\" pop-up (old v1.1.9 plugins, then the v1.2.0 app)."],
+  ]},
+  { group: "Next features", pill: "Feature", items: [
+    ["card-move", "Storage Manager: prepare an SD2Vita / memory card for another Vita (research first, e.g. <code>ux0:id.dat</code>)."],
+    ["ftp-pass", "FTP server: password and blocking <code>../</code> paths (outside review item 11)."],
+    ["danger-60", "Danger confirmations with a countdown before dangerous actions."],
+    ["crash", "Crash Triage screen and an opt-in diagnostic report file."],
+    ["scanner", "File scanner."],
+    ["cheats", "Cheat Manager improvements."],
+    ["fw-tools", "Firmware tools: guide / PUP checker (research only)."],
+    ["troubleshoot", "Troubleshooting Assistant idea (not confirmed yet)."],
+  ]},
+  { group: "Home Screen Layout extras", pill: "Later", items: [
+    ["newapps-folder", "When all 10 pages are full, put new apps in a \"New Apps\" folder (a restore is refused today)."],
+    ["undo-restore", "\"Undo last restore\" using <code>app.db.prelayout</code>."],
+    ["any-backup", "Choose any saved backup, not only Latest / Older."],
+    ["br-import", "Import a Bubble Recall <code>iconlayout.ini</code>."],
+  ]},
+  { group: "Research", pill: "Research", items: [
+    ["early-boot", "Early-boot recovery screen before the home screen starts (side project)."],
+  ]},
+  { group: "Way later", pill: "Big project", items: [
+    ["fw-flash", "Sony Recovery > Update System Software: build on what modoru does so it can <b>flash, upgrade or downgrade</b> the firmware. Today it only uses <code>ux0:update/PSP2UPDAT.PUP</code> and removes HENkaku."],
+  ]},
+];
+
+const DONE = [
+  ["v1.2.0", "Home Screen Layout", "Released 30 Oct 2026, tested on all three Vitas", [
+    "New main menu item <b>Home Screen Layout</b>: Back Up Layout, Restore Latest Backup, Restore Older Backup.",
+    "Restores pages, folders (names and icons), bubble order and each page's wave colour.",
+    "Restore is built on a copy, then swapped in by the boot plugin at the next boot; old database kept as <code>app.db.prelayout</code>.",
+    "Uninstalled apps are skipped; apps installed later go after the last bubble.",
+    "Rebuild Database backs up your layout first.",
+    "Boot plugin update reminder: pop-up and main menu line when the plugins are outdated or incomplete.",
+    "Uses the Vita's own SQLite module.",
+  ]],
+  ["v1.1.9", "Unsafe build and real System Info", "Pushed 29 Oct 2026", [
+    "App built as unsafe homebrew (needs \"Enable Unsafe Homebrew\").",
+    "Real firmware even with version spoofing, e.g. \"3.65 (system reports 3.74)\".",
+    "Correct model and motherboard: PS Vita 2000 / USS-1002, PS Vita 1100 (3G OLED) / IRT-002.",
+    "New Drive access section in System Info.",
+    "System drives are read-only in File Manager and FTP; only user storage can be written.",
+    "FTP lists system drives (read-only); handle leak fixed.",
+  ]],
+  ["v1.1.8", "Undo Safe Mode", "Released 28 Oct 2026", [
+    "Plugin Fix Mode > Undo Safe Mode puts back your exact config from before Safe Mode.",
+    "Plugins list re-reads <code>config.txt</code> every time it opens.",
+    "Clearer Plugin Fix header and \"Re-enable All\" label.",
+    "Config copies up to 128 KB; <code>restore.log</code> rotates at 32 KB.",
+  ]],
+  ["v1.1.7", "Safety release (outside code review)", "Released", [
+    "Hold R is more reliable: launches from the kernel flag or held buttons, with time limits.",
+    "Boot loop breaker after two failed launches.",
+    "Boot Recovery installer can update in place (Install / Update, UPDATE AVAILABLE status).",
+    "Rebuild Database keeps the old database as <code>app.db.bak</code>.",
+    "Restore / Unbrick backs up first and keeps HENkaku, SD2Vita and the boot plugins enabled.",
+    "Safe config writes everywhere (temp file, read back, swap).",
+    "Restore PS Vita System became an honest Safe Mode guide.",
+    "Repo cleanup and README rewrite.",
+  ]],
+  ["v1.1.6", "Rebuild Database works", "Tested on all three Vitas", [
+    "Rebuild Database through the boot plugin at the next boot (Ensō).",
+    "Result shown on the main menu; warning and second confirm about losing folders.",
+    "O on a confirm screen goes straight back to the list.",
+    "Dash characters the font couldn't draw replaced in about 45 messages.",
+  ]],
+  ["v1.1.5", "Confirm screen fixes", "Test build", [
+    "Confirm and message screens need a fresh button press (a held X can't skip them).",
+    "Clearer Check for Updates wording (up to date / older / newer).",
+  ]],
+  ["v1.1.4", "Plugin toggles and CPU cap", "Released", [
+    "Plugin toggles change the right plugin and save straight away.",
+    "Saving never deletes lines; <code>config.txt.bak</code> and verified writes.",
+    "CPU: ARM 500 MHz and BUS 166 MHz removed (refused by the Vita).",
+    "Rebuild Database shows error codes.",
+  ]],
+  ["v1.1.3", "DNS fix", "Tested on all three Vitas", [
+    "Fixed DNS lookup error 0x80410116; Check for Updates works on all three Vitas.",
+  ]],
+  ["v1.1.2", "Own HTTPS client", "", [
+    "Own HTTPS client (mbedTLS, 28 bundled root certificates) because the Vita's SSL couldn't reach GitHub.",
+  ]],
+  ["v1.1.1", "Check for Updates", "", [
+    "Check for Updates: finds the latest GitHub release and downloads the VPK with a SHA-256 check.",
+  ]],
+  ["v1.1.0", "System Info and CPU Speed", "", [
+    "System Info: firmware from os0, Ensō status, Detection debug section.",
+    "CPU Speed: L/R change values, live readback, error codes, default bus 222 MHz.",
+    "<code>build.sh</code> (build / clean / bump).",
+  ]],
+  ["v1.0.9", "FTP status colour", "", [
+    "FTP address turns green while a client is connected, red when none.",
+  ]],
+  ["v1.0.8", "New title bar and versioning", "", [
+    "Title bar \"PS Vita Recovery Menu vX.Y.Z\" with \"By DrinkingSubset\" on every screen.",
+    "One <code>VERSION</code> file drives the title bar and VPK version; <code>bump_version.sh</code>.",
+  ]],
+];
+
+const KEY = "vrc-todo-v1";
+let ticks = {};
+try { ticks = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { ticks = {}; }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(ticks)); } catch (e) {} }
+
+const todoEl = document.getElementById("todo");
+TODO.forEach((g, gi) => {
+  const d = document.createElement("details"); d.className = "ver"; d.open = true;
+  const s = document.createElement("summary");
+  s.innerHTML = `<span class="vt">${g.group}</span><span class="pill ${g.pill === "Bug" ? "w" : ""}">${g.pill}</span><span class="st" data-g="${gi}"></span><span class="chev">&#9656;</span>`;
+  d.appendChild(s);
+  const ul = document.createElement("ul");
+  g.items.forEach(([id, text]) => {
+    const li = document.createElement("li");
+    li.innerHTML = `<label><input type="checkbox" id="todo-${id}"><span class="t todo-t">${text}</span></label>`;
+    const cb = li.querySelector("input"); cb.checked = !!ticks[id];
+    cb.addEventListener("change", () => { ticks[id] = cb.checked; save(); counts(); });
+    ul.appendChild(li);
+  });
+  d.appendChild(ul); todoEl.appendChild(d);
+});
+
+const doneEl = document.getElementById("done");
+let doneCount = 0;
+DONE.forEach(([tag, title, status, items], i) => {
+  const d = document.createElement("details"); d.className = "ver"; d.open = i < 2;
+  d.innerHTML = `<summary><span class="tag">${tag}</span><span class="vt">${title}</span><span class="st">${status ? status + " · " : ""}${items.length} done</span><span class="chev">&#9656;</span></summary>`;
+  const ul = document.createElement("ul");
+  items.forEach((t, k) => {
+    doneCount++;
+    const li = document.createElement("li"); li.className = "done";
+    li.innerHTML = `<label><input type="checkbox" checked disabled id="done-${tag}-${k}" aria-label="done"><span class="t">${t}</span></label>`;
+    ul.appendChild(li);
+  });
+  d.appendChild(ul); doneEl.appendChild(d);
+});
+
+function counts() {
+  let total = 0, ticked = 0;
+  TODO.forEach((g, gi) => {
+    let gt = 0; g.items.forEach(([id]) => { total++; if (ticks[id]) { ticked++; gt++; } });
+    const el = document.querySelector(`.st[data-g="${gi}"]`); if (el) el.textContent = `${gt}/${g.items.length}`;
+  });
+  document.getElementById("summary").innerHTML =
+    `<span><b>${doneCount}</b> features done in <b>${DONE.length}</b> versions</span><span><b>${total - ticked}</b> of <b>${total}</b> items left to fix or do</span>`;
+}
+counts();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+}
+</script>
+
+</body>
+</html>
