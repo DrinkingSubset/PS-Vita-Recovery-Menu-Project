@@ -78,6 +78,33 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    /* v1.2.0: result of a Home Screen Layout restore, written by the boot
+     * plugin during this boot. Shown once (wins over the rebuild notice). */
+    {
+        SceUID fd = sceIoOpen("ur0:tai/layout_restore_result.txt", SCE_O_RDONLY, 0);
+        if (fd >= 0) {
+            char rb[96] = {0};
+            sceIoRead(fd, rb, sizeof(rb) - 1);
+            sceIoClose(fd);
+            sceIoRemove("ur0:tai/layout_restore_result.txt");
+            unsigned int code = 0;
+            if (sscanf(rb, "layout=%x", &code) == 1) {
+                if (code == 0)
+                    snprintf(g_boot_notice, sizeof(g_boot_notice),
+                             "Home screen layout restored.");
+                else
+                    snprintf(g_boot_notice, sizeof(g_boot_notice),
+                             "Layout restore failed: 0x%08X. Nothing changed.", code);
+            } else if (strncmp(rb, "skipped=", 8) == 0) {
+                snprintf(g_boot_notice, sizeof(g_boot_notice),
+                         "Layout restore skipped: plugin loaded late.");
+            } else if (strncmp(rb, "conflict=", 9) == 0) {
+                snprintf(g_boot_notice, sizeof(g_boot_notice),
+                         "Layout restore dropped: database rebuild ran.");
+            }
+        }
+    }
+
     if (booted_via_safemode) {
         /* Auto-apply Safe Mode: load config and disable non-essential plugins */
         plugins_load();

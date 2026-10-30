@@ -597,6 +597,13 @@ static int ri_outdated(void) {
     return !(ri_files_equal(RI_SKPRX_SRC, k) && ri_files_equal(RI_SUPRX_SRC, u));
 }
 
+int recovery_installer_needs_update(void) {
+    int a, b, c, d;
+    int installed = ri_get_status(&a, &b, &c, &d);
+    if (installed) return ri_outdated() ? 1 : 0;
+    return (a || b || c || d) ? 2 : 0;
+}
+
 /* ── Main screen ─────────────────────────────────────────────────────────── */
 
 #define RI_OPT_COUNT 3

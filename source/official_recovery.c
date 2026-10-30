@@ -24,6 +24,7 @@
 #include <strings.h>
 #include "draw.h"
 #include "menu.h"
+#include "layout.h"
 
 #define APP_DB_PATH  "ur0:shell/db/app.db"
 #define UX0_PATH     "ux0:"
@@ -309,10 +310,12 @@ static void do_rebuild_database(void *font) {
         "YOUR HOME SCREEN LAYOUT WILL BE RESET:",
         "- All FOLDERS are removed.",
         "- Bubbles go back to default order.",
+        "The layout is backed up first (v1.2.0): put it",
+        "back with Home Screen Layout > Restore after.",
         "Games, apps and saves are NOT deleted.",
         "The first boot after this takes longer.",
     };
-    if (!warn_screen("Sony Recovery - Rebuild Database", W, 8)) {
+    if (!warn_screen("Sony Recovery - Rebuild Database", W, 10)) {
         cancel_return();
         return;
     }
@@ -326,6 +329,17 @@ static void do_rebuild_database(void *font) {
 
     /* Firmware without Ensō loads plugins too late in boot to do this */
     int late = (g_compat.fw_tier >= FW_367_HENCORE && g_compat.fw_tier != FW_UNKNOWN);
+
+    /* v1.2.0: save the home screen layout first, so it can be put back
+     * after the rebuild (Home Screen Layout > Restore). A restore that is
+     * still waiting for its restart would be out of date: drop it. */
+    display_start(); display_clear(COLOR_BG);
+    draw_titlebar("Sony Recovery - Rebuild Database");
+    draw_text(MENU_X, TITLE_H + 8, COLOR_YELLOW, "Backing up home screen layout...");
+    draw_footerbar("");
+    display_end();
+    layout_cancel_pending();
+    int lb = layout_backup_quiet();
 
     sceIoMkdir("ur0:tai", 0777);
     SceUID fd = sceIoOpen(REBUILD_FLAG, SCE_O_WRONLY | SCE_O_CREAT | SCE_O_TRUNC, 0666);
@@ -342,7 +356,9 @@ static void do_rebuild_database(void *font) {
     snprintf(g_msg2, sizeof(g_msg2), late
              ? "Note: needs Enso; may be skipped on this FW."
              : "The result is shown when this app opens.");
-    snprintf(g_msg3, sizeof(g_msg3), "Press Start to reboot now.");
+    snprintf(g_msg3, sizeof(g_msg3), lb > 0
+             ? "Layout backed up. Press Start to reboot now."
+             : "Layout NOT backed up. Start = reboot now.");
     result_screen(font, "Rebuild Database", 1, 1);
 }
 
@@ -458,6 +474,7 @@ static void do_update_system(void *font) {
 }
 
 void official_recovery_rebuild_database(void *font) { do_rebuild_database(font); }
+int  official_recovery_boot_plugin_state(void) { return boot_plugin_state(); }
 
 /* ══ Option table ══════════════════════════════════════════════════════════ */
 typedef struct {

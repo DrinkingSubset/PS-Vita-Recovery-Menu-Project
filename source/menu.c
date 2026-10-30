@@ -15,6 +15,7 @@
 #include "registry.h"
 #include "restore_screen.h"
 #include "official_recovery.h"
+#include "layout.h"
 #include "sd2vita.h"
 #include "cheat_manager.h"
 #include "filemanager.h"
@@ -57,6 +58,7 @@ static int g_show_sysinfo        = 0;
 static int g_sysinfo_scroll       = 0;
 static int g_show_restore        = 0;
 static int g_show_official_rec   = 0;
+static int g_show_layout         = 0;   /* v1.2.0 */
 static int g_show_sd2vita        = 0;
 static int g_show_cheat_manager  = 0;
 static int g_show_filemanager    = 0;
@@ -100,6 +102,7 @@ static void action_poweroff(void)          { scePowerRequestStandby(); }
 static void action_show_sysinfo(void)      { g_show_sysinfo = 1; }
 static void action_show_restore(void)      { g_show_restore = 1; }
 static void action_show_official_rec(void) { g_show_official_rec = 1; }
+static void action_show_layout(void)       { g_show_layout = 1; }
 static void action_show_sd2vita(void)      { g_show_sd2vita = 1; }
 static void action_show_cheats(void)       { g_show_cheat_manager = 1; }
 static void action_show_filemanager(void)  { g_show_filemanager = 1; }
@@ -435,6 +438,7 @@ static void build_main_menu_impl(void) {
     g_main_items[n++] = (MenuItem){ "Restore / Unbrick",    ITEM_ACTION,   0, action_show_restore,      NULL };
     g_main_items[n++] = (MenuItem){ "Plugin Fix Mode",       ITEM_ACTION,   0, action_show_plugin_fix,   NULL };
     g_main_items[n++] = (MenuItem){ "Sony Recovery",        ITEM_ACTION,   0, action_show_official_rec, NULL };
+    g_main_items[n++] = (MenuItem){ "Home Screen Layout",   ITEM_ACTION,   0, action_show_layout,       NULL };
     g_main_items[n++] = (MenuItem){ "Storage Manager",      ITEM_ACTION,   0, action_show_sd2vita,      NULL };
     g_main_items[n++] = (MenuItem){ "File Manager",     ITEM_ACTION,   0, action_show_filemanager,  NULL };
     g_main_items[n++] = (MenuItem){ "FTP Server",        ITEM_ACTION,   0, action_show_ftp,          NULL };
@@ -584,66 +588,191 @@ void menu_handle_input(Menu **current, SceCtrlData *old) {
 
 // ── Main loop ─────────────────────────────────────────────────────────────────
 
+/* v1.2.0: after an app update the boot plugins on the Vita can be older
+ * than the ones inside the app, and features that need them (Home Screen
+ * Layout restore, Rebuild Database, hold-R boot) would refuse to run.
+ * Tell the user once per launch, straight away, instead of only inside
+ * Advanced > Boot Recovery. Returns 1 if the user chose to update now. */
+static int boot_plugin_update_popup(int state) {
+    static const char *const outdated[] = {
+        "The boot plugins on this Vita are from an older",
+        "version of this app. Newer features need the",
+        "updated ones (Home Screen Layout restore,",
+        "Rebuild Database, hold R at boot).",
+        "",
+        "Boot Recovery > Install / Update Boot Recovery",
+        "copies the new files. Then restart the Vita.",
+    };
+    static const char *const partial[] = {
+        "Boot Recovery is only partly installed (a plugin",
+        "file or config line is missing), so hold R at",
+        "boot, Rebuild Database and Home Screen Layout",
+        "restore may not work.",
+        "",
+        "Boot Recovery > Install / Update Boot Recovery",
+        "repairs it. Then restart the Vita.",
+    };
+    const char *const *L = (state == 2) ? partial : outdated;
+    const int n = 7;
+    SceCtrlData old, now;
+    do { sceCtrlPeekBufferPositive(0, &old, 1); } while (old.buttons);
+    while (1) {
+        display_start();
+        display_clear(COLOR_BG);
+        display_rect(0, 0, SCREEN_W, TITLE_LINE, COLOR_TITLE_BG);
+        display_app_title(6);
+        display_text(MENU_X, 26, COLOR_DIM, "Boot Recovery");
+        display_hline(0, TITLE_LINE, SCREEN_W, COLOR_GREEN);
+
+        int y = TITLE_H + 8;
+        display_rect(MENU_X - 8, y, SCREEN_W - (MENU_X - 8) * 2,
+                     LINE_H * (n + 1) + 8, RGBA8(40, 40, 0, 255));
+        display_text(MENU_X, y + 4, COLOR_YELLOW, state == 2
+                     ? "BOOT RECOVERY NEEDS A REPAIR"
+                     : "BOOT RECOVERY UPDATE AVAILABLE");
+        for (int i = 0; i < n; i++)
+            display_text(MENU_X, y + 4 + LINE_H * (i + 1), COLOR_TEXT, L[i]);
+        int by = y + LINE_H * (n + 1) + 20;
+        display_text(MENU_X, by,          COLOR_GREEN, "[X] Open Boot Recovery now");
+        display_text(MENU_X, by + LINE_H, COLOR_DIM,   "[O] Later");
+
+        display_rect(0, FOOTER_Y, SCREEN_W, SCREEN_H - FOOTER_Y, COLOR_TITLE_BG);
+        display_hline(0, FOOTER_LINE, SCREEN_W, COLOR_GREEN);
+        display_text(MENU_X, FOOTER_Y + 7, COLOR_DIM, "[X] Open Boot Recovery    [O] Later");
+        display_end();
+
+        sceCtrlPeekBufferPositive(0, &now, 1);
+        if ((now.buttons & SCE_CTRL_CROSS) && !(old.buttons & SCE_CTRL_CROSS)) {
+            do { sceCtrlPeekBufferPositive(0, &now, 1); } while (now.buttons);
+            return 1;
+        }
+        if ((now.buttons & SCE_CTRL_CIRCLE) && !(old.buttons & SCE_CTRL_CIRCLE)) {
+            do { sceCtrlPeekBufferPositive(0, &now, 1); } while (now.buttons);
+            return 0;
+        }
+        old = now;
+    }
+}
+
+/* Main menu notice while the boot plugins still need an update */
+static void boot_plugin_notice(int state) {
+    static const char *const msgs[] = {
+        "",
+        "Boot plugins outdated: Advanced > Boot Recovery",
+        "Boot plugins incomplete: Advanced > Boot Recovery",
+    };
+    int i;
+    /* Don't hide a result notice from this boot (rebuild / layout) */
+    for (i = 1; i <= 2; i++)
+        if (strcmp(g_boot_notice, msgs[i]) == 0) g_boot_notice[0] = '\0';
+    if (state && !g_boot_notice[0])
+        snprintf(g_boot_notice, sizeof(g_boot_notice), "%s", msgs[state]);
+}
+
+/* Check the boot plugins and update the pop-up / notice line.
+ * The pop-up appears when the state is new (not every time the menu is
+ * shown): at app start, or when something changed it since - e.g. a
+ * plugin file renamed in File Manager, or an uninstall. */
+static int g_recheck_boot = 0;
+static void boot_plugin_check(void) {
+    static int popped_for = 0;          /* state the pop-up was last shown for */
+    int st = recovery_installer_needs_update();
+    if (st && st != popped_for) {
+        popped_for = st;
+        if (boot_plugin_update_popup(st)) {
+            recovery_installer_run();
+            st = recovery_installer_needs_update();
+        }
+    }
+    if (st == 0) popped_for = 0;        /* fixed: show again if it breaks later */
+    boot_plugin_notice(st);
+}
+
 void menu_run(void) {
 
     build_main_menu_impl();
+
+    /* v1.2.0: boot plugin update check at start (and again whenever a
+     * full screen tool returns to the menu, see g_recheck_boot) */
+    boot_plugin_check();
 
     Menu *current = &g_main_menu;
     SceCtrlData old_ctrl;
     memset(&old_ctrl, 0, sizeof(old_ctrl));
 
     while (!g_exit_requested) {
+        if (g_recheck_boot) {
+            g_recheck_boot = 0;
+            boot_plugin_check();
+            memset(&old_ctrl, 0, sizeof(old_ctrl));
+        }
         /* Hand off to full-screen overlays BEFORE starting a new frame */
         if (g_show_restore) {
             g_show_restore = 0;
+            g_recheck_boot = 1;
             restore_screen_run(NULL);
             memset(&old_ctrl, 0, sizeof(old_ctrl));
             continue;
         }
         if (g_show_official_rec) {
             g_show_official_rec = 0;
+            g_recheck_boot = 1;
             official_recovery_screen_run(NULL);
+            memset(&old_ctrl, 0, sizeof(old_ctrl));
+            continue;
+        }
+        if (g_show_layout) {
+            g_show_layout = 0;
+            g_recheck_boot = 1;
+            layout_screen_run(NULL);
             memset(&old_ctrl, 0, sizeof(old_ctrl));
             continue;
         }
         if (g_show_sd2vita) {
             g_show_sd2vita = 0;
+            g_recheck_boot = 1;
             sd2vita_screen_run(NULL);
             memset(&old_ctrl, 0, sizeof(old_ctrl));
             continue;
         }
         if (g_show_cheat_manager) {
             g_show_cheat_manager = 0;
+            g_recheck_boot = 1;
             cheat_manager_screen_run(NULL);
             memset(&old_ctrl, 0, sizeof(old_ctrl));
             continue;
         }
         if (g_show_filemanager) {
             g_show_filemanager = 0;
+            g_recheck_boot = 1;
             filemanager_screen_run(NULL);
             memset(&old_ctrl, 0, sizeof(old_ctrl));
             continue;
         }
         if (g_show_plugin_fix) {
             g_show_plugin_fix = 0;
+            g_recheck_boot = 1;
             plugin_fix_run(NULL);
             memset(&old_ctrl, 0, sizeof(old_ctrl));
             continue;
         }
         if (g_show_ftp) {
             g_show_ftp = 0;
+            g_recheck_boot = 1;
             ftp_screen_run();
             memset(&old_ctrl, 0, sizeof(old_ctrl));
             continue;
         }
         if (g_show_update) {
             g_show_update = 0;
+            g_recheck_boot = 1;
             update_screen_run();
             memset(&old_ctrl, 0, sizeof(old_ctrl));
             continue;
         }
         if (g_show_diag) {
             g_show_diag = 0;
+            g_recheck_boot = 1;
             diag_run();
             /* Drain: wait for all buttons released so O doesn't fire back handler */
             do { sceCtrlPeekBufferPositive(0, &old_ctrl, 1); } while (old_ctrl.buttons);
@@ -652,6 +781,7 @@ void menu_run(void) {
         if (g_show_ri) {
             g_show_ri = 0;
             recovery_installer_run();
+            g_recheck_boot = 1;
             do { sceCtrlPeekBufferPositive(0, &old_ctrl, 1); } while (old_ctrl.buttons);
             continue;
         }

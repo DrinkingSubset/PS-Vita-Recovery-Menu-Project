@@ -17,3 +17,7 @@ void official_recovery_screen_run(void *font);
 /* Rebuild Database flow (warnings + boot plugin request); also used by
  * Restore / Unbrick option 5. */
 void official_recovery_rebuild_database(void *font);
+
+/* Boot plugin (boot_recovery.skprx) in the KERNEL section:
+ * 0 = not installed/enabled, 1 = older build, 2 = same as this app's. */
+int official_recovery_boot_plugin_state(void);
