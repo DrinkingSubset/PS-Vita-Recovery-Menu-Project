@@ -526,12 +526,15 @@ const char *compat_exploit_name(void) {
 
 const char *compat_fw_tier_name(void) {
     switch (g_compat.fw_tier) {
+        /* v1.2.1: names follow the current Vita hacks guide. HENlo is the
+         * modern entry point for 3.65-3.74; Enso only exists for 3.60 and
+         * 3.65 (newer FW can be downgraded to 3.65 to get it). */
         case FW_360_HENKAKU:  return "HENkaku (Enso capable)";
-        case FW_365_HENCORE:  return "h-encore (Enso capable)";
-        case FW_367_HENCORE:  return "h-encore (no Enso)";
-        case FW_368_HENCORE:  return "h-encore (no Enso)";
-        case FW_373_HENCORE2: return "h-encore2 (no Enso)";
-        case FW_374_HENCORE2: return "h-encore2 / Hackcockoo";
+        case FW_365_HENCORE:  return "h-encore/HENlo (Enso capable)";
+        case FW_367_HENCORE:  return "h-encore/HENlo (no Enso)";
+        case FW_368_HENCORE:  return "h-encore/HENlo (no Enso)";
+        case FW_373_HENCORE2: return "h-encore2/HENlo (no Enso)";
+        case FW_374_HENCORE2: return "h-encore2/HENlo (no Enso)";
         default:              return "Unknown exploit";
     }
 }

@@ -14,7 +14,7 @@
  *   3.67  — h-encore only, NO Ensō
  *   3.68  — h-encore only, NO Ensō
  *   3.73  — h-encore2 only, NO Ensō
- *   3.74  — Hackcockoo / h-encore2, NO Ensō
+ *   3.74  — h-encore2 / HENlo, NO Ensō
  */
 
 #include <psp2/io/stat.h>
@@ -36,7 +36,7 @@ typedef enum {
     FW_367_HENCORE  = 2,   /* 3.67 — h-encore, NO Ensō              */
     FW_368_HENCORE  = 3,   /* 3.68 — h-encore, NO Ensō              */
     FW_373_HENCORE2 = 4,   /* 3.73 — h-encore2, NO Ensō             */
-    FW_374_HENCORE2 = 5,   /* 3.74 — Hackcockoo / h-encore2, NO Ensō*/
+    FW_374_HENCORE2 = 5,   /* 3.74 — h-encore2 / HENlo, NO Ensō*/
     FW_UNKNOWN      = 6
 } FwTier;
 
