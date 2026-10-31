@@ -3,6 +3,27 @@
 By DrinkingSubset. Newest version first. Copy a version's block straight into
 the GitHub release notes.
 
+## v1.2.1
+**Boot Diagnostics, rebuilt.** It is meant to find the real cause when a Vita misbehaves, so false alarms are gone and real problems are easier to spot.
+
+- **New layout and navigation.**
+  - **Summary screen:** the overall result at the top ("NO PROBLEMS FOUND" or "1 PROBLEM, 2 WARNINGS"), one row per section with its status, and a short "What to do" list. It opens on the first section that has a problem.
+  - **Section screens:** press X to open a section. Long lines wrap instead of running off the screen, and each section lists its own fixes. **L/R** moves to the previous/next section, **Up/Down** scrolls, **O** goes back, **Square** re-scans.
+  - Levels are stricter: **FAIL** only for things that can stop the Vita booting CFW or cut it off from storage; **WARN** for likely causes of trouble; **INFO** for plain facts.
+- **Fix: HENkaku is no longer reported missing while it is running.** The app now asks the system whether taiHEN and HENkaku are loaded, looks for their files in `ur0:tai/`, `ux0:tai/` and `imc0:tai/`, and only warns when Ensō is installed and a file it needs at boot is gone. `henkaku.suprx` (the HENkaku Settings menu) is never treated as a problem.
+- **No more "High plugin count (boot loop risk)".** Plenty of setups run 20+ plugins fine. The count is now shown as information, split by section (for example "KERNEL 5, main 9").
+- **New plugin checks:**
+  - plugin files listed in the config but missing from the memory card;
+  - kernel plugins (`.skprx`) outside `*KERNEL` and user plugins (`.suprx`) inside it, which never load;
+  - the same plugin listed twice in one section;
+  - `henkaku.skprx` / `taihen.skprx` listed by hand (they load on their own);
+  - the newest plugin files and when the config last changed, since the newest plugin is the first suspect after "it broke after I installed something".
+- **Storage:** more than one storage plugin turned on at once (StorageMgr, YAMT, gamesd, sdgamesd, usbmc) is reported as a problem. Switched-off (`#`) lines no longer count as installed.
+- **tai config:** shows which `config.txt` this app edits and warns when both `ux0:tai` and `ur0:tai` have one (taiHEN reads `ux0:tai/config.txt` first). Config backups now include the automatic ones (`config.txt.bak`, `tai_backup/`), not only Plugin Fix's `config_backup.txt`.
+- **Boot Recovery** section: whether this app's boot plugins are installed and up to date.
+- Exploit names follow the current Vita hacks guide: HENkaku (3.60), h-encore/HENlo (3.65–3.68), h-encore2/HENlo (3.69–3.74). "Hackcockoo" removed. On firmware without Ensō, Boot Diagnostics suggests downgrading to 3.65 with modoru.
+- No boot plugin changes: just install the VPK.
+
 ## v1.2.0
 > **After installing, open Advanced > Boot Recovery > Install / Update Boot Recovery, then reboot.** The kernel boot plugin changed (it applies layout restores). The app now reminds you of this when it starts. "Enable Unsafe Homebrew" must stay ticked.
 

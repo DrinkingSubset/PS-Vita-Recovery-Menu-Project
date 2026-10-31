@@ -82,7 +82,7 @@ The creator and developer of PS Vita Recovery Menu (**DrinkingSubset**) is **not
 
 ---
 
-## PS Vita Recovery Menu v1.2.0
+## PS Vita Recovery Menu v1.2.1
 
 A custom recovery environment for the PS Vita (and PSTV) running HENkaku / h-encore / Ensō.
 Hold R at power-on to boot directly into the recovery menu (Ensō required for boot entry).
@@ -117,7 +117,7 @@ Toggle any plugin on/off per section; changes save immediately (like AutoPlugin2
 * Registry Hacks
 * Reset VSH (restart LiveArea)
 * Suspend / Shut Down / Reboot
-* Boot Diagnostics
+* Boot Diagnostics: a summary of six checks (System, CFW, tai Config, Plugins, Storage, Boot Recovery) with suggested fixes; finds missing or misplaced plugins, duplicate lines and conflicting storage plugins
 * Boot Recovery: installer for the boot plugins (Install / Update / Uninstall)
 
 ### System Information
