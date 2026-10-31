@@ -23,6 +23,7 @@ the GitHub release notes.
 - **Boot Recovery** section: whether this app's boot plugins are installed and up to date.
 - Exploit names follow the current Vita hacks guide: HENkaku (3.60), h-encore/HENlo (3.65–3.68), h-encore2/HENlo (3.69–3.74). "Hackcockoo" removed. On firmware without Ensō, Boot Diagnostics suggests downgrading to 3.65 with modoru.
 - No boot plugin changes: just install the VPK.
+- Tested on a PS Vita 2000 and two PCH-1101 3G (3.60 / 3.65 Ensō, all with SD2Vita). On one of them it found a real problem: a misspelled YAMT helper line in `config.txt` that had been failing silently at every boot.
 
 ## v1.2.0
 > **After installing, open Advanced > Boot Recovery > Install / Update Boot Recovery, then reboot.** The kernel boot plugin changed (it applies layout restores). The app now reminds you of this when it starts. "Enable Unsafe Homebrew" must stay ticked.
