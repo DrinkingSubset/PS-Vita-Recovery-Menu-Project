@@ -71,7 +71,7 @@ body { margin: 0; min-height: 100vh; }
 </style>
 </head>
 <body>
-<header class="bar"><div class="bar-in"><h1>PS Vita Recovery Menu v1.2.0</h1><span class="by">By DrinkingSubset</span></div></header>
+<header class="bar"><div class="bar-in"><h1>PS Vita Recovery Menu v1.2.1</h1><span class="by">By DrinkingSubset</span></div></header>
 
 <main class="wrap">
   <div class="summary" id="summary"></div>
@@ -92,7 +92,6 @@ body { margin: 0; min-height: 100vh; }
 const TODO = [
   { group: "Bugs", pill: "Bug", items: [
     ["fm-view", "File Manager: every file says <b>\"File too large to view\"</b> (reported on v1.1.9)."],
-    ["diag-henkaku", "Boot Diagnostics shows a false \"HENkaku file missing\"."],
   ]},
   { group: "Needs testing", pill: "Test", items: [
     ["sony-card", "Test everything with an official Sony memory card (all testing so far used SD2Vita)."],
@@ -100,11 +99,16 @@ const TODO = [
     ["pstv", "PS TV: hold R at boot is unconfirmed (needs a tester)."],
     ["update-avail", "Optional: see the \"UPDATE AVAILABLE\" pop-up (old v1.1.9 plugins, then the v1.2.0 app)."],
   ]},
+  { group: "Boot Diagnostics roadmap", pill: "Planned", items: [
+    ["diag-crash", "<b>v1.2.2</b> Crash dumps: list recent <code>.psp2dmp</code> crashes by app (e.g. SceShell crashing points to a *main plugin)."],
+    ["diag-space", "<b>v1.2.3</b> Free space on <code>ur0:</code> and <code>ux0:</code>, with a warning when ur0: is nearly full."],
+    ["diag-report", "<b>v1.2.4</b> Save report: write the results to <code>ux0:data/vita_recovery/diag_report.txt</code> to share when asking for help."],
+    ["diag-bisect", "<b>v1.2.5</b> Find the Bad Plugin: guided halving (turn half off, reboot, repeat) with undo."],
+  ]},
   { group: "Next features", pill: "Feature", items: [
     ["card-move", "Storage Manager: prepare an SD2Vita / memory card for another Vita (research first, e.g. <code>ux0:id.dat</code>)."],
     ["ftp-pass", "FTP server: password and blocking <code>../</code> paths (outside review item 11)."],
     ["danger-60", "Danger confirmations with a countdown before dangerous actions."],
-    ["crash", "Crash Triage screen and an opt-in diagnostic report file."],
     ["scanner", "File scanner."],
     ["cheats", "Cheat Manager improvements."],
     ["fw-tools", "Firmware tools: guide / PUP checker (research only)."],
@@ -125,6 +129,16 @@ const TODO = [
 ];
 
 const DONE = [
+  ["v1.2.1", "Boot Diagnostics rebuilt", "Released 31 Oct 2026, tested on all three Vitas", [
+    "Fixed: HENkaku no longer reported missing while it is running (checks taiHEN / HENkaku are loaded, looks in all tai folders).",
+    "New summary screen with overall status, six sections and a \"What to do\" list; X opens a section, L/R moves between them.",
+    "No more \"High plugin count\" warning; counts shown per section instead.",
+    "New checks: missing plugin files, plugins in the wrong section, duplicates, HENkaku listed by hand, newest plugins.",
+    "Two storage plugins on at once reported as a problem; switched-off lines no longer count.",
+    "Shows which config.txt the app edits and warns when ux0:tai and ur0:tai both have one.",
+    "Boot Recovery section; exploit names updated (h-encore/HENlo, h-encore2/HENlo).",
+    "Found a real misspelled YAMT helper line on the red ribbon Vita.",
+  ]],
   ["v1.2.0", "Home Screen Layout", "Released 30 Oct 2026, tested on all three Vitas", [
     "New main menu item <b>Home Screen Layout</b>: Back Up Layout, Restore Latest Backup, Restore Older Backup.",
     "Restores pages, folders (names and icons), bubble order and each page's wave colour.",
@@ -245,7 +259,6 @@ function counts() {
 }
 counts();
 </script>
-
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });

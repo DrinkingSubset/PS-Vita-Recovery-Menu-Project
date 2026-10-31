@@ -1,6 +1,6 @@
 // Vita Recovery Checklist - offline support.
 // Bump VERSION whenever index.html changes, so phones pick up the new list.
-const VERSION = "vrc-2026-10-30-1";
+const VERSION = "vrc-2026-10-31-3";
 const FILES = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable-512.png"];
 
 self.addEventListener("install", (e) => {
