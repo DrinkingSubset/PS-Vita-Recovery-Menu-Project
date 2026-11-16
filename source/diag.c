@@ -26,6 +26,8 @@
  *                 HENkaku listed by hand, newest plugin files
  *   Storage       drives, storage plugins (more than one = conflict),
  *                 storage_config.txt
+ *   Crash Reports (v1.2.3) crash dumps the Vita saved in ux0:data: newest
+ *                 first, repeated home screen crashes, space they use
  *   Boot Recovery this app's boot plugins and the hold-R loop breaker
  *
  * Removed in v1.2.1 (false alarms):
@@ -67,10 +69,10 @@ static const uint32_t SEV_COL[] = {
 };
 
 /* ── Results ─────────────────────────────────────────────────────────────── */
-enum { S_SYSTEM, S_CFW, S_CONFIG, S_PLUGINS, S_STORAGE, S_BOOTREC, S_COUNT };
+enum { S_SYSTEM, S_CFW, S_CONFIG, S_PLUGINS, S_STORAGE, S_CRASH, S_BOOTREC, S_COUNT };
 static const char *const SEC_NAME[S_COUNT] = {
     "System", "CFW (taiHEN / HENkaku)", "tai Config",
-    "Plugins", "Storage", "Boot Recovery",
+    "Plugins", "Storage", "Crash Reports", "Boot Recovery",
 };
 
 #define DIAG_MAX      128
@@ -490,6 +492,109 @@ static void check_storage(void) {
     }
 }
 
+/* ── Crash Reports (v1.2.3) ──────────────────────────────────────────────
+ * When something crashes the Vita saves a dump in ux0:data, for example
+ *   psp2core-1544287470-0x0000ce9b2b-eboot.bin.psp2dmp
+ *   psp2core-SceVideoPlayer.spsp2dmp      (encrypted system dump)
+ * The part after the time / process id names what crashed. Games and
+ * homebrew all show up as "eboot.bin"; the home screen shows up with
+ * "shell" in its name. Repeated home screen crashes almost always come
+ * from a plugin under *main. */
+#define CRASH_MAX 64
+typedef struct { char label[40]; SceDateTime t; SceOff size; } Crash;
+
+static int is_dump(const char *n) {
+    return strncasecmp(n, "psp2core", 8) == 0 &&
+           (ends_with_ci(n, ".psp2dmp") || ends_with_ci(n, ".spsp2dmp") ||
+            ends_with_ci(n, ".psp2dmp.tmp"));
+}
+
+/* "psp2core-1544287470-0x0000ce9b2b-eboot.bin.psp2dmp" -> "eboot.bin" */
+static void dump_label(const char *n, char *out, int len) {
+    const char *p = n + 8;
+    if (*p == '-') p++;
+    for (;;) {                                  /* skip time and 0x.. id */
+        const char *d = strchr(p, '-');
+        if (!d) break;
+        int numeric = 1;
+        for (const char *q = p; q < d; q++)
+            if (!((*q >= '0' && *q <= '9') || *q == 'x' || *q == 'X' ||
+                  (*q >= 'a' && *q <= 'f') || (*q >= 'A' && *q <= 'F'))) numeric = 0;
+        if (!numeric || d == p) break;
+        p = d + 1;
+    }
+    snprintf(out, len, "%s", p);
+    char *e = strstr(out, ".spsp2dmp");
+    if (!e) e = strstr(out, ".psp2dmp");
+    if (e) *e = '\0';
+    if (!out[0]) snprintf(out, len, "unknown");
+}
+
+static int is_shell(const char *label) {
+    for (const char *p = label; *p; p++)
+        if (strncasecmp(p, "shell", 5) == 0) return 1;
+    return 0;
+}
+
+static void check_crashes(void) {
+    begin(S_CRASH);
+    static Crash c[CRASH_MAX];
+    int n = 0, total = 0, shell = 0;
+    long long bytes = 0;
+
+    SceUID dir = sceIoDopen("ux0:data");
+    if (dir < 0) { emit(SEV_INFO, "ux0:data not readable, skipped"); return; }
+    SceIoDirent d;
+    memset(&d, 0, sizeof(d));
+    while (sceIoDread(dir, &d) > 0) {
+        if (SCE_S_ISDIR(d.d_stat.st_mode) || !is_dump(d.d_name)) continue;
+        total++;
+        bytes += d.d_stat.st_size;
+        Crash cur;
+        dump_label(d.d_name, cur.label, sizeof(cur.label));
+        cur.t = d.d_stat.st_mtime;
+        cur.size = d.d_stat.st_size;
+        if (is_shell(cur.label)) shell++;
+        /* keep the newest CRASH_MAX, sorted newest first */
+        int k = n < CRASH_MAX ? n : CRASH_MAX - 1;
+        if (n == CRASH_MAX && time_cmp(&cur.t, &c[k].t) <= 0) continue;
+        while (k > 0 && time_cmp(&cur.t, &c[k - 1].t) > 0) { c[k] = c[k - 1]; k--; }
+        c[k] = cur;
+        if (n < CRASH_MAX) n++;
+    }
+    sceIoDclose(dir);
+
+    if (total == 0) { emit(SEV_OK, "No crash reports in ux0:data"); return; }
+
+    int mb = (int)(bytes / (1024 * 1024));
+    emitf(SEV_INFO, "%d crash report%s in ux0:data (%d MB)",
+          total, total == 1 ? "" : "s", mb);
+
+    if (shell >= 2) {
+        emitf(SEV_WARN, "Home screen (SceShell) crashed %d times", shell);
+        emit(SEV_INFO, "Usually caused by a plugin under *main");
+        fix("Turn off *main plugins one by one, newest first");
+    } else if (shell == 1) {
+        emit(SEV_INFO, "Home screen (SceShell) crashed once");
+    }
+
+    for (int i = 0; i < n && i < 6; i++)
+        emitf(SEV_INFO, "%s %04u-%02u-%02u %02u:%02u  %s",
+              i == 0 ? "Newest:" : "       ",
+              c[i].t.year, c[i].t.month, c[i].t.day, c[i].t.hour, c[i].t.minute,
+              is_shell(c[i].label) ? "home screen"
+              : strcasecmp(c[i].label, "eboot.bin") == 0 ? "game/app (eboot.bin)"
+              : c[i].label);
+    if (total > 6) emitf(SEV_INFO, "...and %d older", total - 6);
+
+    if (mb >= 100) {
+        emitf(SEV_WARN, "Crash reports take up %d MB of ux0:", mb);
+        fix("Delete old psp2core files in ux0:data (File Manager)");
+    } else {
+        fix("Old crash reports can be deleted from ux0:data");
+    }
+}
+
 static void check_bootrec(void) {
     begin(S_BOOTREC);
     int st = recovery_installer_needs_update();
@@ -522,6 +627,7 @@ static void diag_scan(void) {
     check_config();
     check_plugins();
     check_storage();
+    check_crashes();
     check_bootrec();
 }
 

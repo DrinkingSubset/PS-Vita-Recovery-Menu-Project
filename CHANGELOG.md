@@ -3,6 +3,22 @@
 By DrinkingSubset. Newest version first. Copy a version's block straight into
 the GitHub release notes.
 
+## v1.2.3
+**Crash Reports, and a File Manager that opens files.**
+
+- **Boot Diagnostics > Crash Reports** (new section). Lists the crash reports the Vita saved in `ux0:data` (`psp2core-*.psp2dmp`), newest first, with date, time and what crashed, plus how much space they use.
+  - **Home screen (SceShell) crashed 2+ times** is reported as a warning: that is almost always a plugin under `*main`. Suggested fix: turn `*main` plugins off one by one, newest first (the Plugins section shows the newest plugin files).
+  - Crash reports using 100 MB or more of `ux0:` are reported as a warning. Old reports can be deleted from `ux0:data` with the File Manager.
+- **Fix: File Manager said "File too large to view" for almost every file.** The viewer only opened files under 8 KB. Now:
+  - files up to 256 KB open in full; bigger files show their first 256 KB with a note on top;
+  - binary files (eboot.bin, .skprx, images) open as a **hex view** instead of garbage;
+  - **Up/Down** scroll and keep scrolling while held, **L/R** move a page at a time, **Left/Right** scroll long lines sideways;
+  - the title shows which lines you are on ("19-35 of 863").
+- **Battery in the title bar:** the battery level and an icon under "By DrinkingSubset" on every screen, read live from the Vita (checked every 2 seconds). Yellow at 20% or less, red at 10% or less, a lightning bolt while charging. Hidden on PS TV.
+- **File Manager:** the folder path was drawn twice on top of itself; long paths now show "..." and the last part so they never run under the battery.
+- **Menus:** the "< Back" rows are gone from Advanced, Plugins and Registry Hacks, like Settings. **O** goes back in every menu.
+- No boot plugin changes: just install the VPK.
+
 ## v1.2.2
 **Themes.** Give the recovery menu a different look, including a PSP M33-style Retro theme.
 

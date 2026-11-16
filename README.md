@@ -82,7 +82,7 @@ The creator and developer of PS Vita Recovery Menu (**DrinkingSubset**) is **not
 
 ---
 
-## PS Vita Recovery Menu v1.2.2
+## PS Vita Recovery Menu v1.2.3
 
 A custom recovery environment for the PS Vita (and PSTV) running HENkaku / h-encore / Ensō.
 Hold R at power-on to boot directly into the recovery menu (Ensō required for boot entry).
@@ -115,7 +115,7 @@ Toggle any plugin on/off per section; changes save immediately (like AutoPlugin2
 * Registry Hacks
 * Reset VSH (restart LiveArea)
 * Suspend / Shut Down / Reboot
-* Boot Diagnostics: a summary of six checks (System, CFW, tai Config, Plugins, Storage, Boot Recovery) with suggested fixes; finds missing or misplaced plugins, duplicate lines and conflicting storage plugins
+* Boot Diagnostics: a summary of seven checks (System, CFW, tai Config, Plugins, Storage, Crash Reports, Boot Recovery) with suggested fixes; finds missing or misplaced plugins, duplicate lines, conflicting storage plugins and repeated home screen crashes
 * Boot Recovery: installer for the boot plugins (Install / Update / Uninstall)
 
 ### Settings
@@ -155,7 +155,7 @@ Back up and restore your home screen: pages, folders (with their names and icons
 Card & config info, mount point switching, StorageMgr install, format tools.
 
 ### File Manager
-Partition browser with folder and file operations. Reads every drive; writes only to user storage (`ux0: ur0: uma0: imc0: xmc0: grw0:`). System drives are read-only.
+Partition browser with folder and file operations. The viewer opens text files (first 256 KB) and shows binary files as hex. Reads every drive; writes only to user storage (`ux0: ur0: uma0: imc0: xmc0: grw0:`). System drives are read-only.
 
 ### FTP Server (Settings)
 Transfer files over Wi-Fi from your PC. System drives are listed read-only. There is no password, so use it on a network you trust.
@@ -291,7 +291,7 @@ All testing so far used SD2Vita. Sony memory cards are not tested yet; reports w
 
 ## Future Plans
 
-- Crash triage screen and an opt-in diagnostic report file
+- Boot Diagnostics: free space check, saved report file, and "Find the Bad Plugin"
 - Danger confirmations with a countdown
 - Home Screen Layout: put new apps into a folder when all 10 pages are full (a restore is refused today), and an "Undo last restore" option
 - PS TV boot trigger support

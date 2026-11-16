@@ -42,7 +42,6 @@
 #define FM_MAX_ENTRIES 256
 #define FM_NAME_MAX   128
 #define FM_PATH_MAX   512
-#define FM_TEXTBUF_SZ (8 * 1024)
 
 /* ── Partition table ─────────────────────────────────────────────────────── */
 typedef struct {
@@ -91,15 +90,28 @@ static int btn_pressed(SceCtrlData *n, SceCtrlData *o, unsigned int b) {
     return (n->buttons & b) && !(o->buttons & b);
 }
 
+/* v1.2.3: keep the path clear of the battery at the right of the title
+ * bar: a long path shows "..." and its last part. */
+#define FM_PATH_RIGHT 780                      /* battery + "100%" start here */
+static void fm_draw_path(int x, const char *path) {
+    int max = (FM_PATH_RIGHT - x) / 16;
+    int len = (int)strlen(path);
+    char buf[FM_PATH_MAX];
+    if (len <= max) snprintf(buf, sizeof(buf), "%s", path);
+    else            snprintf(buf, sizeof(buf), "...%s", path + len - (max - 3));
+    draw_text(x, 26, COLOR_DIM, buf);
+}
+
 static void fm_titlebar(const char *path, int readonly) {
     display_rect(0, 0, SCREEN_W, FM_TITLE_LINE, COLOR_TITLE_BG);
     display_app_title(6);
-    if (readonly)
+    /* v1.2.3: the path was drawn twice (at two positions) when writable */
+    if (readonly) {
         draw_text(MENU_X, 26, COLOR_RED, "[READ-ONLY]");
-    else
-        draw_text(MENU_X + 16*12, 26, COLOR_DIM, path[0] ? path : "/ Partitions");
-    if (!readonly)
-        draw_text(MENU_X, 26, COLOR_DIM, path[0] ? path : "/ Partitions");
+        fm_draw_path(MENU_X + 16 * 12, path[0] ? path : "/ Partitions");
+    } else {
+        fm_draw_path(MENU_X, path[0] ? path : "/ Partitions");
+    }
     display_hline(0, FM_TITLE_LINE, SCREEN_W, COLOR_GREEN);
 }
 
@@ -196,71 +208,143 @@ static void fm_load_dir(const char *path) {
     sceIoDclose(dir);
 }
 
-/* ── Text viewer/editor ──────────────────────────────────────────────────── */
+/* ── File viewer ─────────────────────────────────────────────────────────
+ * v1.2.3: rewritten. Before, any file over 8 KB was refused with "File too
+ * large to view", which in practice was almost every file. Now:
+ *  - the first FM_VIEW_MAX bytes are shown (bigger files say so on top);
+ *  - the file is read until end of file, not by trusting a seek for its size;
+ *  - binary files (a zero byte near the start) open as a hex view;
+ *  - Up/Down scroll and repeat while held, L/R page, Left/Right scroll long
+ *    text lines sideways. */
+#define FM_VIEW_MAX   (256 * 1024)
+#define FM_VIEW_COLS  55                 /* characters that fit on a row */
+#define FM_HEX_BYTES  8                  /* bytes per hex row            */
+
 static void fm_view_text(const char *filepath, int readonly) {
-    /* Read file */
+    (void)readonly;
     SceUID fd = sceIoOpen(filepath, SCE_O_RDONLY, 0);
     if (fd < 0) { fm_message("Cannot open file.", COLOR_RED); return; }
-    int sz = (int)sceIoLseek(fd, 0, SCE_SEEK_END);
-    sceIoLseek(fd, 0, SCE_SEEK_SET);
-    if (sz > FM_TEXTBUF_SZ - 1) {
-        sceIoClose(fd);
-        fm_message("File too large to view (> 8KB).", COLOR_YELLOW);
-        return;
+    char *buf = malloc(FM_VIEW_MAX + 1);
+    if (!buf) { sceIoClose(fd); fm_message("Not enough memory.", COLOR_RED); return; }
+    int len = 0, r = 0;
+    while (len < FM_VIEW_MAX && (r = sceIoRead(fd, buf + len, FM_VIEW_MAX - len)) > 0)
+        len += r;
+    int truncated = 0;
+    if (len == FM_VIEW_MAX) {            /* anything left after the cap? */
+        char probe;
+        truncated = (sceIoRead(fd, &probe, 1) > 0);
     }
-    char *buf = malloc(FM_TEXTBUF_SZ);
-    if (!buf) { sceIoClose(fd); return; }
-    int r = sceIoRead(fd, buf, sz);
     sceIoClose(fd);
-    if (r < 0) { free(buf); fm_message("Read error.", COLOR_RED); return; }
-    buf[r] = '\0';
+    if (r < 0 && len == 0) { free(buf); fm_message("Read error.", COLOR_RED); return; }
+    buf[len] = '\0';
 
-    /* Split into lines */
-    char *lines[256];
-    int   nlines = 0;
-    char *p = buf;
-    while (*p && nlines < 255) {
-        lines[nlines++] = p;
-        char *nl = strchr(p, '\n');
-        if (!nl) break;
-        *nl = '\0';
-        p = nl + 1;
+    /* Binary if there is a zero byte in the first 4 KB */
+    int binary = 0;
+    for (int i = 0; i < len && i < 4096; i++) if (buf[i] == '\0') { binary = 1; break; }
+
+    /* Text: index the line starts (count first, then fill) */
+    char **lines = NULL;
+    int nlines = 0;
+    if (!binary) {
+        int cap = 1;
+        for (int i = 0; i < len; i++) if (buf[i] == '\n') cap++;
+        lines = malloc(sizeof(char *) * cap);
+        if (!lines) { free(buf); fm_message("Not enough memory.", COLOR_RED); return; }
+        char *p = buf;
+        while (nlines < cap) {
+            lines[nlines++] = p;
+            char *nl = strchr(p, '\n');
+            if (!nl) break;
+            *nl = '\0';
+            if (nl > p && nl[-1] == '\r') nl[-1] = '\0';   /* Windows line ends */
+            p = nl + 1;
+            if (!*p) break;                                  /* no empty last row */
+        }
+    } else {
+        nlines = (len + FM_HEX_BYTES - 1) / FM_HEX_BYTES;
     }
+    if (nlines == 0) nlines = 1;
 
-    int top = 0;
-    int vis = FM_LIST_H / FM_ROW_H;
+    int vis = FM_LIST_H / FM_ROW_H - (truncated ? 1 : 0);
+    int top = 0, left = 0, hold = 0;
     SceCtrlData old, ctrl;
-    memset(&old, 0, sizeof(old));
     do { sceCtrlPeekBufferPositive(0, &old, 1); } while (old.buttons);
 
     while (1) {
         display_start(); display_clear(COLOR_BG);
 
-        /* Title */
         display_rect(0, 0, SCREEN_W, FM_TITLE_LINE, COLOR_TITLE_BG);
-        draw_text(MENU_X, 6,  COLOR_TEXT, "File Viewer");
-        draw_text(MENU_X, 26, COLOR_DIM,  filepath);
+        {
+            char t[64];
+            int end = top + vis < nlines ? top + vis : nlines;
+            snprintf(t, sizeof(t), "File Viewer%s  %d-%d of %d",
+                     binary ? " (hex)" : "", len ? top + 1 : 0, end, nlines);
+            draw_text(MENU_X, 6, COLOR_TEXT, t);
+        }
+        draw_text(MENU_X, 26, COLOR_DIM, filepath);
         display_hline(0, FM_TITLE_LINE, SCREEN_W, COLOR_GREEN);
 
-        /* Lines */
-        for (int i = 0; i < vis && top + i < nlines; i++) {
-            char linebuf[64];
-            snprintf(linebuf, sizeof(linebuf), "%-55.55s", lines[top + i]);
-            draw_text(MENU_X, FM_LIST_Y + i * FM_ROW_H,
-                      COLOR_TEXT, linebuf);
+        int y = FM_LIST_Y;
+        if (truncated) {
+            draw_text(MENU_X, y, COLOR_YELLOW, "Large file: showing the first 256 KB only.");
+            y += FM_ROW_H;
+        }
+        for (int i = 0; i < vis && top + i < nlines; i++, y += FM_ROW_H) {
+            char row[FM_VIEW_COLS + 1];
+            int n = 0;
+            if (binary) {
+                int off = (top + i) * FM_HEX_BYTES;
+                n = snprintf(row, sizeof(row), "%08X ", off);
+                for (int k = 0; k < FM_HEX_BYTES; k++)
+                    n += snprintf(row + n, sizeof(row) - n,
+                                  off + k < len ? " %02X" : "   ",
+                                  off + k < len ? (unsigned char)buf[off + k] : 0);
+                n += snprintf(row + n, sizeof(row) - n, "  ");
+                for (int k = 0; k < FM_HEX_BYTES && off + k < len && n < FM_VIEW_COLS; k++) {
+                    unsigned char c = (unsigned char)buf[off + k];
+                    row[n++] = (c >= 32 && c < 127) ? (char)c : '.';
+                }
+                row[n] = '\0';
+            } else {
+                const char *L = lines[top + i];
+                int ll = (int)strlen(L);
+                for (int k = left; k < ll && n < FM_VIEW_COLS; k++) {
+                    unsigned char c = (unsigned char)L[k];
+                    row[n++] = (c == '\t') ? ' ' : (c < 32 ? '.' : (char)c);
+                }
+                row[n] = '\0';
+            }
+            draw_text(MENU_X, y, COLOR_TEXT, row);
         }
 
-        fm_footer(readonly
-                  ? "[O] Back   [Up/Down] Scroll"
-                  : "[O] Back   [Up/Down] Scroll");
+        fm_footer(binary ? "[O] Back  [Up/Dn] Scroll  [L/R] Page"
+                         : "[O] Back [Up/Dn] Scroll [L/R] Page [<>] Side");
         display_end();
 
         sceCtrlPeekBufferPositive(0, &ctrl, 1);
         if (btn_pressed(&ctrl, &old, SCE_CTRL_CIRCLE)) break;
-        if (btn_pressed(&ctrl, &old, SCE_CTRL_DOWN) && top + vis < nlines) top++;
-        if (btn_pressed(&ctrl, &old, SCE_CTRL_UP)   && top > 0)            top--;
+
+        /* Up/Down: once on press, then repeat while held (~0.4 s delay) */
+        int dir = 0;
+        if (ctrl.buttons & (SCE_CTRL_UP | SCE_CTRL_DOWN)) {
+            hold++;
+            if (hold == 1 || (hold > 24 && hold % 3 == 0))
+                dir = (ctrl.buttons & SCE_CTRL_DOWN) ? 1 : -1;
+        } else hold = 0;
+        int maxtop = nlines > vis ? nlines - vis : 0;
+        top += dir;
+        if (btn_pressed(&ctrl, &old, SCE_CTRL_RTRIGGER)) top += vis;
+        if (btn_pressed(&ctrl, &old, SCE_CTRL_LTRIGGER)) top -= vis;
+        if (top > maxtop) top = maxtop;
+        if (top < 0) top = 0;
+        if (!binary) {
+            if (btn_pressed(&ctrl, &old, SCE_CTRL_RIGHT)) left += 20;
+            if (btn_pressed(&ctrl, &old, SCE_CTRL_LEFT))  left -= 20;
+            if (left < 0) left = 0;
+        }
         old = ctrl;
     }
+    free(lines);
     free(buf);
 }
 

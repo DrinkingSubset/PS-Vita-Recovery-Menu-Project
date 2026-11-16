@@ -59,7 +59,11 @@ static int write_text(const char *path, const char *data) {
 static void title_bar(const char *t) {
     display_rect(0, 0, SCREEN_W, TITLE_LINE, COLOR_TITLE_BG);
     display_app_title(6);
-    draw_text(MENU_X, 26, COLOR_DIM,  t);
+    /* v1.2.3: long game titles stop before the battery (46 characters) */
+    char sub[48];
+    if ((int)strlen(t) > 46) snprintf(sub, sizeof(sub), "%.43s...", t);
+    else                     snprintf(sub, sizeof(sub), "%s", t);
+    draw_text(MENU_X, 26, COLOR_DIM, sub);
     display_hline(0, TITLE_LINE, SCREEN_W, COLOR_GREEN);
 }
 static void footer(const char *t) {

@@ -361,11 +361,7 @@ static void build_plugins_menu_impl(Menu *parent) {
     g_plugin_items[n].submenu = NULL;
     n++;
 
-    g_plugin_items[n].label   = "< Back";
-    g_plugin_items[n].type    = ITEM_BACK;
-    g_plugin_items[n].action  = NULL;
-    g_plugin_items[n].submenu = NULL;
-    n++;
+    /* v1.2.3: no "< Back" row - O goes back in every menu */
 
     g_plugin_menu.title    = plugins_get_config_path();
     g_plugin_menu.subtitle = "Plugins";
@@ -391,11 +387,15 @@ static void build_registry_menu_impl(Menu *parent) {
         n++;
     }
 
-    g_registry_items[n].label   = "< Back";
-    g_registry_items[n].type    = ITEM_BACK;
-    g_registry_items[n].action  = NULL;
-    g_registry_items[n].submenu = NULL;
-    n++;
+    /* v1.2.3: no "< Back" row - O goes back. A menu needs at least one
+     * row (the cursor code divides by the row count). */
+    if (n == 0) {
+        g_registry_items[n].label   = "No registry settings found";
+        g_registry_items[n].type    = ITEM_HEADER;
+        g_registry_items[n].action  = NULL;
+        g_registry_items[n].submenu = NULL;
+        n++;
+    }
 
     g_registry_menu.title    = "Registry Hacks";
     g_registry_menu.items    = g_registry_items;
@@ -422,7 +422,6 @@ static void build_advanced_menu_impl(Menu *main) {
      * only set a flag nothing used - File Manager keeps os0:/vs0: read-only
      * regardless - so it promised something it did not do. */
     (void)action_toggle_dev_unlock;
-    g_advanced_items[n++] = (MenuItem){ "< Back",          ITEM_BACK,      0, NULL,              NULL             };
 
     g_advanced_menu.title    = "Advanced";
     g_advanced_menu.items    = g_advanced_items;
