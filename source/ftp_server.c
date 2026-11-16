@@ -729,6 +729,8 @@ void ftp_screen_run(void) {
     char url[64];
     snprintf(url, sizeof(url), "ftp://%s:%d", g_server_ip, FTP_PORT);
 
+    int mounted[MOUNT_COUNT];
+    unsigned int frame = 0;
     while (1) {
         display_start();
         display_clear(COLOR_BG);
@@ -759,16 +761,34 @@ void ftp_screen_run(void) {
         display_text(MENU_X, y, COLOR_DIM, "Accessible partitions:");
         y += LINE_H + 4;
 
-        for (int i = 0; i < MOUNT_COUNT; i++) {
-            SceIoStat st;
-            int ok = (sceIoGetstat(g_mounts[i], &st) >= 0);
-            char row[48];
-            snprintf(row, sizeof(row), "  %s", g_mounts[i]);
-            display_text(MENU_X, y, ok ? COLOR_GREEN : COLOR_DIM, row);
-            display_text(MENU_X + 160, y,
-                         ok ? COLOR_GREEN : COLOR_DIM,
-                         ok ? "accessible" : "not mounted");
-            y += LINE_H;
+        /* v1.2.2: 2 columns of 8. One column of 15 rows ran past the footer,
+         * so the last drives and the hint below were cut off. */
+        if (frame % 30 == 0)                       /* re-check twice a second */
+            for (int i = 0; i < MOUNT_COUNT; i++) {
+                SceIoStat st;
+                mounted[i] = (sceIoGetstat(g_mounts[i], &st) >= 0);
+            }
+        frame++;
+        {
+            const int rows = (MOUNT_COUNT + 1) / 2;   /* 8 */
+            for (int i = 0; i < MOUNT_COUNT; i++) {
+                int cx = MENU_X + (i / rows) * 440;
+                int cy = y + (i % rows) * LINE_H;
+                char cell[32];
+                uint32_t col;
+                if (!mounted[i]) {
+                    snprintf(cell, sizeof(cell), "%-6s not mounted", g_mounts[i]);
+                    col = COLOR_DIM;
+                } else if (fs_path_writable(g_mounts[i])) {
+                    snprintf(cell, sizeof(cell), "%-6s read/write", g_mounts[i]);
+                    col = COLOR_GREEN;
+                } else {
+                    snprintf(cell, sizeof(cell), "%-6s read-only", g_mounts[i]);
+                    col = COLOR_YELLOW;
+                }
+                display_text(cx, cy, col, cell);
+            }
+            y += rows * LINE_H;
         }
 
         y += 8;

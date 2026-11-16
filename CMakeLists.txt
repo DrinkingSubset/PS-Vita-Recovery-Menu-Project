@@ -88,6 +88,9 @@ add_executable(${PROJECT_NAME}
     source/vita_sqlite.c
     source/layout_core.c
     source/layout.c
+    source/theme.c
+    source/psp_font.c
+    source/rain.c
 )
 
 add_custom_target(boot_plugins ALL

@@ -12,6 +12,7 @@
 #include "compat.h"
 #include "plugins.h"
 #include "cpu.h"
+#include "theme.h"
 
 #define FLAG_RECOVERY  "ur0:tai/recovery_boot_trigger"
 #define FLAG_SAFEMODE  "ur0:tai/safemode_boot_trigger"
@@ -23,6 +24,7 @@ static int flag_exists(const char *path) {
 
 int main(int argc, char *argv[]) {
     display_init();
+    theme_load();          /* v1.2.2: Classic or Retro theme */
     sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG_WIDE);
     compat_init();
     cpu_load_and_apply();   /* restore saved clock settings */

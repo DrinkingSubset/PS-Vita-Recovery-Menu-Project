@@ -82,7 +82,7 @@ The creator and developer of PS Vita Recovery Menu (**DrinkingSubset**) is **not
 
 ---
 
-## PS Vita Recovery Menu v1.2.1
+## PS Vita Recovery Menu v1.2.2
 
 A custom recovery environment for the PS Vita (and PSTV) running HENkaku / h-encore / Ensō.
 Hold R at power-on to boot directly into the recovery menu (Ensō required for boot entry).
@@ -103,9 +103,7 @@ See [CHANGELOG.md](CHANGELOG.md) for what changed in each version.
 * Home Screen Layout
 * Storage Manager
 * File Manager
-* FTP Server
-* Cheat Manager
-* Check for Updates
+* Settings (Theme, FTP Server, Cheat Manager, Check for Updates)
 * Reboot
 * Power Off
 
@@ -119,6 +117,13 @@ Toggle any plugin on/off per section; changes save immediately (like AutoPlugin2
 * Suspend / Shut Down / Reboot
 * Boot Diagnostics: a summary of six checks (System, CFW, tai Config, Plugins, Storage, Boot Recovery) with suggested fixes; finds missing or misplaced plugins, duplicate lines and conflicting storage plugins
 * Boot Recovery: installer for the boot plugins (Install / Update / Uninstall)
+
+### Settings
+![Theme screen with live preview](VitaRecovery%20Screenshots/v1.2.2/theme_live_preview.gif)
+
+* Theme: **Classic** (the original green look) or **Retro**, an M33-style look with the PSP font in one of 13 colours, with live preview
+* Matrix Rain: falling code behind every screen (Retro themes only); Square on the Theme screen turns it on or off
+* FTP Server, Cheat Manager, Check for Updates (described below)
 
 ### System Information
 Firmware version, model, Ensō status, motherboard series, live clocks, battery health, memory, active tai config path.
@@ -152,13 +157,13 @@ Card & config info, mount point switching, StorageMgr install, format tools.
 ### File Manager
 Partition browser with folder and file operations. Reads every drive; writes only to user storage (`ux0: ur0: uma0: imc0: xmc0: grw0:`). System drives are read-only.
 
-### FTP Server
+### FTP Server (Settings)
 Transfer files over Wi-Fi from your PC. System drives are listed read-only. There is no password, so use it on a network you trust.
 
-### Cheat Manager
+### Cheat Manager (Settings)
 Vita native cheats and PSP CWCheat (.db) support.
 
-### Check for Updates
+### Check for Updates (Settings)
 Checks this GitHub repository for the latest release and downloads the `.vpk` to `ux0:downloads/` with a SHA-256 check. You install it yourself with VitaShell. Uses its own HTTPS client (mbedTLS with bundled root certificates) because the Vita's built-in SSL cannot connect to GitHub on older firmware.
 
 ---
@@ -352,6 +357,7 @@ The Vita scene built on PSP foundations with deep reversing and safe, persistent
 - The entire **r/vitahacks** community (Reddit) for guides, testing, and support.
 - **vita.hacks.guide** maintainers — The definitive modern resource.
 - **GameBrew**, **PSDevWiki**, and **PSP-Archive** for preserving history.
+- **pspsdk** developers for the PSP debug font used by the Retro themes (BSD license, see `THIRD_PARTY_NOTICES.txt`).
 - All plugin authors (StorageMgr, rePatch, NoNpDrm, etc.) whose work is used daily.
 - Testers, translators, documenters, and everyone who shared knowledge on forums like GBAtemp, PSX-Place, and DCEmu.
 

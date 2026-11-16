@@ -185,9 +185,32 @@ void psvDebugScreenFlip(void) {
 /* bg == PSV_TRANSPARENT: only draw foreground pixels, leave bg intact */
 #define PSV_TRANSPARENT 0x00000000u
 
+extern const unsigned char psp_font[256 * 8];  /* psp_font.c */
+static int g_psp_font = 0;
+void psvDebugScreenSetFont(int psp_font_on) { g_psp_font = psp_font_on; }
+
+/* v1.2.2: draw one PSP-font glyph (any of the 256) at 2x, foreground only.
+ * Used by the Matrix rain. */
+void psvDebugScreenDrawGlyph(int x, int y, unsigned char c, uint32_t fg) {
+    if (!g_fb[g_back]) return;
+    const uchar *glyph = &psp_font[c * 8];
+    uint32_t *buf = g_fb[g_back];
+    for (int row = 0; row < 8; row++) {
+        uchar bits = glyph[row];
+        if (!bits) continue;
+        for (int col = 0; col < 8; col++) {
+            if (!(bits & (0x80 >> col))) continue;
+            int px = x + col * 2, py = y + row * 2;
+            if (px < 0 || px + 1 >= SCREEN_W || py < 0 || py + 1 >= SCREEN_H) continue;
+            uint32_t *p0 = &buf[py * FB_STRIDE + px];
+            p0[0] = p0[1] = p0[FB_STRIDE] = p0[FB_STRIDE + 1] = fg;
+        }
+    }
+}
+
 static void draw_char_at(int x, int y, uchar c, uint32_t fg, uint32_t bg) {
     if (c < 32 || c > 127) c = 32;
-    const uchar *glyph = font[c - 32];
+    const uchar *glyph = g_psp_font ? &psp_font[c * 8] : font[c - 32];
     uint32_t *buf = g_fb[g_back];
     int transparent = (bg == PSV_TRANSPARENT);
     for (int row = 0; row < 8; row++) {

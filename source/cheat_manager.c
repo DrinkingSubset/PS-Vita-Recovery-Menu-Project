@@ -605,7 +605,7 @@ void cheat_manager_screen_run(void *font) {
                 draw_text(MENU_X, y+LINE_H, COLOR_DIM,  OPTS[i].desc);
             }
         }
-        footer("[X] Open   [O] Back to Main Menu");
+        footer("[X] Open   [O] Back");
         display_end(); 
 
         sceCtrlPeekBufferPositive(0, &ctrl, 1);
