@@ -1,0 +1,26 @@
+PS Vita Recovery Menu v1.2.2 - how to release
+
+1) BUILD THE VPK
+   Unzip Vita_Recovery_v1_2_2.zip into a NEW folder, then run:
+       bash build.sh clean
+   The VPK appears in build/. Rename it VitaRecovery_v1.2.2.vpk.
+
+2) UPLOAD THE FILES TO GITHUB
+   On the repo page: Add file > Upload files.
+   Drag in EVERYTHING inside the "changed_files" folder (select all, drag),
+   so the folders are kept:
+       CHANGELOG.md, CMakeLists.txt, README.md, THIRD_PARTY_NOTICES.txt, VERSION
+       source/  (12 files: cheat_manager.c, debugScreen.c/.h, display.c/.h,
+                 ftp_server.c, main.c, menu.c, psp_font.c, rain.c/.h, theme.c/.h)
+       VitaRecovery Screenshots/v1.2.2/  (3 animations/grid + 6 screenshots)
+   Commit message: v1.2.2: Themes, Settings menu, FTP and O-button fixes
+   Commit directly to main.
+
+3) CREATE THE RELEASE
+   Releases > Draft a new release
+   Tag: v1.2.2 (create on main)   Title: v1.2.2 - Themes
+   Paste all of RELEASE_NOTES_v1.2.2.md into the description.
+   The images link to the files from step 2, so do step 2 FIRST.
+   Click Preview to check them, attach VitaRecovery_v1.2.2.vpk, Publish.
+
+No boot plugin changes: users only install the VPK.

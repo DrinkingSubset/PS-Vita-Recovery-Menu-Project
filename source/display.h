@@ -20,17 +20,28 @@
 
 /* Colors — psvDebugScreen pixel format: 0x00BBGGRR */
 #define RGBA8(r,g,b,a)  (((b)<<16)|((g)<<8)|(r))
-#define COLOR_BG        RGBA8(  0,  0,  0,255)
-#define COLOR_TEXT      RGBA8(255,255,255,255)
-#define COLOR_SELECTED  RGBA8(255,255,255,255)
-#define COLOR_SEL_BG    RGBA8(  0,180,  0,255)
-#define COLOR_DIM       RGBA8(160,160,160,255)
-#define COLOR_GREEN     RGBA8( 80,255, 80,255)
-#define COLOR_RED       RGBA8(255, 80, 80,255)
-#define COLOR_YELLOW    RGBA8(255,220,  0,255)
-#define COLOR_TITLE_BG  RGBA8(  0, 60,  0,255)
-#define COLOR_TITLE     RGBA8(255,255,255,255)
-#define COLOR_HEADER    RGBA8(200,200,200,255)
+#define COLOR_BG        RGBA8(  0,  0,  0,255)   /* always black (0 = transparent text bg) */
+
+/* v1.2.2 (themes test): colours come from the active theme at runtime.
+ * Classic = the original green look. Retro = M33-style: black screen,
+ * PSP font, text in the theme colour, selected text in white, no bars. */
+typedef struct {
+    uint32_t text, selected, sel_bg, dim, green, red, yellow,
+             title_bg, title, header, line;
+} ThemeColors;
+extern ThemeColors g_tc;
+extern int g_theme_retro;          /* 1 = retro style active */
+
+#define COLOR_TEXT      (g_tc.text)
+#define COLOR_SELECTED  (g_tc.selected)
+#define COLOR_SEL_BG    (g_tc.sel_bg)
+#define COLOR_DIM       (g_tc.dim)
+#define COLOR_GREEN     (g_tc.green)
+#define COLOR_RED       (g_tc.red)
+#define COLOR_YELLOW    (g_tc.yellow)
+#define COLOR_TITLE_BG  (g_tc.title_bg)
+#define COLOR_TITLE     (g_tc.title)
+#define COLOR_HEADER    (g_tc.header)
 
 void display_init(void);
 void display_start(void);

@@ -16,6 +16,7 @@
 #include "restore_screen.h"
 #include "official_recovery.h"
 #include "layout.h"
+#include "theme.h"
 #include "sd2vita.h"
 #include "cheat_manager.h"
 #include "filemanager.h"
@@ -39,6 +40,9 @@ static Menu     g_main_menu;
 static MenuItem g_advanced_items[14];
 static Menu     g_advanced_menu;
 
+static MenuItem g_settings_items[8];   /* v1.2.2: Settings submenu */
+static Menu     g_settings_menu;
+
 // Plugins menu is dynamic: plugins + section headers + 5 action rows.
 // v1.1.4: g_plugin_item_idx maps a MENU row to its PLUGIN index. Before,
 // the menu row number was used directly, so once a section header was
@@ -59,6 +63,7 @@ static int g_sysinfo_scroll       = 0;
 static int g_show_restore        = 0;
 static int g_show_official_rec   = 0;
 static int g_show_layout         = 0;   /* v1.2.0 */
+static int g_show_theme          = 0;   /* v1.2.2 */
 static int g_show_sd2vita        = 0;
 static int g_show_cheat_manager  = 0;
 static int g_show_filemanager    = 0;
@@ -103,6 +108,7 @@ static void action_show_sysinfo(void)      { g_show_sysinfo = 1; }
 static void action_show_restore(void)      { g_show_restore = 1; }
 static void action_show_official_rec(void) { g_show_official_rec = 1; }
 static void action_show_layout(void)       { g_show_layout = 1; }
+static void action_show_theme(void)        { g_show_theme = 1; }
 static void action_show_sd2vita(void)      { g_show_sd2vita = 1; }
 static void action_show_cheats(void)       { g_show_cheat_manager = 1; }
 static void action_show_filemanager(void)  { g_show_filemanager = 1; }
@@ -425,8 +431,26 @@ static void build_advanced_menu_impl(Menu *main) {
     g_advanced_menu.parent   = main;
 }
 
+/* v1.2.2: Settings - Theme, plus FTP / Cheat Manager / Updates */
+static void build_settings_menu_impl(Menu *main) {
+    int n = 0;
+    g_settings_items[n++] = (MenuItem){ "Theme",                      ITEM_ACTION, 0, action_show_theme, NULL };
+    g_settings_items[n++] = (MenuItem){ "",                           ITEM_SEPARATOR, 0, NULL,              NULL };
+    /* moved here from the main menu in v1.2.2 */
+    g_settings_items[n++] = (MenuItem){ "FTP Server",                 ITEM_ACTION, 0, action_show_ftp,    NULL };
+    g_settings_items[n++] = (MenuItem){ "Cheat Manager",              ITEM_ACTION, 0, action_show_cheats, NULL };
+    g_settings_items[n++] = (MenuItem){ "Check for Updates",          ITEM_ACTION, 0, action_show_update, NULL };
+
+    g_settings_menu.title    = "Settings";
+    g_settings_menu.items    = g_settings_items;
+    g_settings_menu.count    = n;
+    g_settings_menu.selected = 0;
+    g_settings_menu.parent   = main;
+}
+
 static void build_main_menu_impl(void) {
     build_advanced_menu_impl(&g_main_menu);
+    build_settings_menu_impl(&g_main_menu);
     build_plugins_menu_impl(&g_main_menu);
 
     int n = 0;
@@ -441,9 +465,7 @@ static void build_main_menu_impl(void) {
     g_main_items[n++] = (MenuItem){ "Home Screen Layout",   ITEM_ACTION,   0, action_show_layout,       NULL };
     g_main_items[n++] = (MenuItem){ "Storage Manager",      ITEM_ACTION,   0, action_show_sd2vita,      NULL };
     g_main_items[n++] = (MenuItem){ "File Manager",     ITEM_ACTION,   0, action_show_filemanager,  NULL };
-    g_main_items[n++] = (MenuItem){ "FTP Server",        ITEM_ACTION,   0, action_show_ftp,          NULL };
-    g_main_items[n++] = (MenuItem){ "Cheat Manager",    ITEM_ACTION,   0, action_show_cheats,       NULL };
-    g_main_items[n++] = (MenuItem){ "Check for Updates", ITEM_ACTION,  0, action_show_update,       NULL };
+    g_main_items[n++] = (MenuItem){ "Settings",          ITEM_SUBMENU, 0, NULL,                     &g_settings_menu };
     g_main_items[n++] = (MenuItem){ "",                     ITEM_SEPARATOR,0, NULL,                     NULL };
     g_main_items[n++] = (MenuItem){ "Reboot",               ITEM_ACTION,   0, action_reboot,            NULL };
     g_main_items[n++] = (MenuItem){ "Power Off",            ITEM_ACTION,   0, action_poweroff,          NULL };
@@ -698,76 +720,87 @@ void menu_run(void) {
 
     Menu *current = &g_main_menu;
     SceCtrlData old_ctrl;
-    memset(&old_ctrl, 0, sizeof(old_ctrl));
+    /* v1.2.2: start from the buttons held right now, not "nothing held".
+     * After a full-screen tool closes with O, O is often still down; with
+     * an empty old_ctrl the menu saw it as a NEW press and jumped back a
+     * level (Settings -> Main Menu). Held buttons only count once released
+     * and pressed again. */
+    sceCtrlPeekBufferPositive(0, &old_ctrl, 1);
 
     while (!g_exit_requested) {
         if (g_recheck_boot) {
             g_recheck_boot = 0;
             boot_plugin_check();
-            memset(&old_ctrl, 0, sizeof(old_ctrl));
+            sceCtrlPeekBufferPositive(0, &old_ctrl, 1);   /* held != new press */
         }
         /* Hand off to full-screen overlays BEFORE starting a new frame */
         if (g_show_restore) {
             g_show_restore = 0;
             g_recheck_boot = 1;
             restore_screen_run(NULL);
-            memset(&old_ctrl, 0, sizeof(old_ctrl));
+            sceCtrlPeekBufferPositive(0, &old_ctrl, 1);   /* held != new press */
             continue;
         }
         if (g_show_official_rec) {
             g_show_official_rec = 0;
             g_recheck_boot = 1;
             official_recovery_screen_run(NULL);
-            memset(&old_ctrl, 0, sizeof(old_ctrl));
+            sceCtrlPeekBufferPositive(0, &old_ctrl, 1);   /* held != new press */
+            continue;
+        }
+        if (g_show_theme) {
+            g_show_theme = 0;
+            theme_screen_run();
+            sceCtrlPeekBufferPositive(0, &old_ctrl, 1);   /* held != new press */
             continue;
         }
         if (g_show_layout) {
             g_show_layout = 0;
             g_recheck_boot = 1;
             layout_screen_run(NULL);
-            memset(&old_ctrl, 0, sizeof(old_ctrl));
+            sceCtrlPeekBufferPositive(0, &old_ctrl, 1);   /* held != new press */
             continue;
         }
         if (g_show_sd2vita) {
             g_show_sd2vita = 0;
             g_recheck_boot = 1;
             sd2vita_screen_run(NULL);
-            memset(&old_ctrl, 0, sizeof(old_ctrl));
+            sceCtrlPeekBufferPositive(0, &old_ctrl, 1);   /* held != new press */
             continue;
         }
         if (g_show_cheat_manager) {
             g_show_cheat_manager = 0;
             g_recheck_boot = 1;
             cheat_manager_screen_run(NULL);
-            memset(&old_ctrl, 0, sizeof(old_ctrl));
+            sceCtrlPeekBufferPositive(0, &old_ctrl, 1);   /* held != new press */
             continue;
         }
         if (g_show_filemanager) {
             g_show_filemanager = 0;
             g_recheck_boot = 1;
             filemanager_screen_run(NULL);
-            memset(&old_ctrl, 0, sizeof(old_ctrl));
+            sceCtrlPeekBufferPositive(0, &old_ctrl, 1);   /* held != new press */
             continue;
         }
         if (g_show_plugin_fix) {
             g_show_plugin_fix = 0;
             g_recheck_boot = 1;
             plugin_fix_run(NULL);
-            memset(&old_ctrl, 0, sizeof(old_ctrl));
+            sceCtrlPeekBufferPositive(0, &old_ctrl, 1);   /* held != new press */
             continue;
         }
         if (g_show_ftp) {
             g_show_ftp = 0;
             g_recheck_boot = 1;
             ftp_screen_run();
-            memset(&old_ctrl, 0, sizeof(old_ctrl));
+            sceCtrlPeekBufferPositive(0, &old_ctrl, 1);   /* held != new press */
             continue;
         }
         if (g_show_update) {
             g_show_update = 0;
             g_recheck_boot = 1;
             update_screen_run();
-            memset(&old_ctrl, 0, sizeof(old_ctrl));
+            sceCtrlPeekBufferPositive(0, &old_ctrl, 1);   /* held != new press */
             continue;
         }
         if (g_show_diag) {
